@@ -1,0 +1,436 @@
+openapi: 3.0.0
+info:
+  title: DockNow API
+  description: API for marina slip booking and management
+  version: 2.0.0
+  contact:
+    name: DockNow Support
+    email: support@docknow.com
+
+servers:
+  - url: http://localhost:3000
+    description: Local development
+  - url: https://your-app.vercel.app
+    description: Production
+
+tags:
+  - name: Marinas
+    description: Marina search and details
+  - name: Filters
+    description: Filter options for search
+  - name: Auth
+    description: Authentication endpoints
+
+paths:
+  /api/marinas/filters:
+    get:
+      tags:
+        - Filters
+      summary: Get all filter options
+      description: Returns all available filter options including amenity types, business types, locations, and price ranges
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      amenityTypes:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: integer
+                            name:
+                              type: string
+                            icon:
+                              type: string
+                            category:
+                              type: string
+                              enum: [utility, facility, service]
+                      businessTypes:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: integer
+                            name:
+                              type: string
+                            slug:
+                              type: string
+                            description:
+                              type: string
+                      anchorageTypes:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: integer
+                            name:
+                              type: string
+                            description:
+                              type: string
+                      mooringTypes:
+                        type: array
+                        items:
+                          type: object
+                      seabedTypes:
+                        type: array
+                        items:
+                          type: object
+                      pointTypes:
+                        type: array
+                        items:
+                          type: object
+                      locations:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            city:
+                              type: string
+                            state:
+                              type: string
+                            country:
+                              type: string
+                            label:
+                              type: string
+                      priceRange:
+                        type: object
+                        properties:
+                          min:
+                            type: number
+                          max:
+                            type: number
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/marinas/search:
+    get:
+      tags:
+        - Marinas
+      summary: Marina search with comprehensive filters
+      description: Search for marinas with multiple filter options including amenities, business types, dates, and boat specifications
+      parameters:
+        - name: searchTerm
+          in: query
+          description: Search by marina name, description, or city
+          schema:
+            type: string
+          example: "Marina Vallarta"
+        - name: city
+          in: query
+          description: Filter by city
+          schema:
+            type: string
+          example: "Puerto Vallarta"
+        - name: state
+          in: query
+          description: Filter by state
+          schema:
+            type: string
+          example: "Jalisco"
+        - name: checkIn
+          in: query
+          description: Check-in date (YYYY-MM-DD)
+          schema:
+            type: string
+            format: date
+          example: "2025-12-01"
+        - name: checkOut
+          in: query
+          description: Check-out date (YYYY-MM-DD)
+          schema:
+            type: string
+            format: date
+          example: "2025-12-07"
+        - name: minPrice
+          in: query
+          description: Minimum price per day
+          schema:
+            type: number
+          example: 500
+        - name: maxPrice
+          in: query
+          description: Maximum price per day
+          schema:
+            type: number
+          example: 1000
+        - name: minBoatLength
+          in: query
+          description: Minimum boat length in meters
+          schema:
+            type: number
+          example: 10
+        - name: maxBoatLength
+          in: query
+          description: Maximum boat length in meters
+          schema:
+            type: number
+          example: 50
+        - name: minDraft
+          in: query
+          description: Minimum draft in meters
+          schema:
+            type: number
+          example: 2
+        - name: amenities
+          in: query
+          description: Comma-separated amenity IDs
+          schema:
+            type: string
+          example: "1,2,3"
+        - name: businessTypeId
+          in: query
+          description: Filter by business type ID
+          schema:
+            type: integer
+          example: 1
+        - name: featured
+          in: query
+          description: Filter by featured status
+          schema:
+            type: boolean
+          example: true
+        - name: limit
+          in: query
+          description: Number of results to return
+          schema:
+            type: integer
+            default: 20
+          example: 10
+        - name: offset
+          in: query
+          description: Number of results to skip
+          schema:
+            type: integer
+            default: 0
+          example: 0
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      marinas:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Marina"
+                      pagination:
+                        type: object
+                        properties:
+                          total:
+                            type: integer
+                            description: Total number of matching marinas
+                          limit:
+                            type: integer
+                          offset:
+                            type: integer
+                          hasMore:
+                            type: boolean
+              example:
+                success: true
+                data:
+                  marinas:
+                    - id: 1
+                      name: "Marina Vallarta"
+                      slug: "marina-vallarta"
+                      description: "Premier full-service marina in the heart of Puerto Vallarta"
+                      price_per_day: 850
+                      city: "Puerto Vallarta"
+                      state: "Jalisco"
+                      country: "Mexico"
+                      latitude: 20.66180000
+                      longitude: -105.24039000
+                      total_slips: 350
+                      available_slips: 45
+                      max_boat_length_meters: 50.00
+                      max_boat_draft_meters: 6.00
+                      is_featured: true
+                      business_type: "Full Service Marina"
+                      avg_rating: 4.8
+                      review_count: 125
+                  pagination:
+                    total: 45
+                    limit: 10
+                    offset: 0
+                    hasMore: true
+                    longitude: -80.1918
+                    review_count: 45
+                    avg_rating: 4.5
+                total: 1
+                limit: 20
+                offset: 0
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/marinas/{slug}:
+    get:
+      tags:
+        - Marinas
+      summary: Get marina details by slug
+      description: Returns detailed information about a specific marina including amenities and reviews
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          description: Marina slug identifier
+          schema:
+            type: string
+          example: "miami-marina"
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Marina"
+                  - type: object
+                    properties:
+                      amenities:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: integer
+                            name:
+                              type: string
+                            icon:
+                              type: string
+                            category:
+                              type: string
+                      reviews:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Review"
+        "404":
+          description: Marina not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  schemas:
+    Marina:
+      type: object
+      properties:
+        id:
+          type: integer
+        slug:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        price_per_day:
+          type: number
+        city:
+          type: string
+        state:
+          type: string
+        country:
+          type: string
+        address:
+          type: string
+        postal_code:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+        contact_name:
+          type: string
+        contact_email:
+          type: string
+        contact_phone:
+          type: string
+        website_url:
+          type: string
+        total_slips:
+          type: integer
+        available_slips:
+          type: integer
+        max_boat_length_meters:
+          type: number
+        max_boat_draft_meters:
+          type: number
+        is_featured:
+          type: boolean
+        is_active:
+          type: boolean
+        review_count:
+          type: integer
+        avg_rating:
+          type: number
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Review:
+      type: object
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        marina_id:
+          type: integer
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        comment:
+          type: string
+        first_name:
+          type: string
+        last_name:
+          type: string
+        is_approved:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        details:
+          type: string

@@ -1,0 +1,322 @@
+{
+  "info": {
+    "name": "DockNow API",
+    "description": "Complete API collection for DockNow marina booking platform",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "docknow-api-v2",
+    "version": "2.0.0"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Register User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\",\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"phone\": \"+1234567890\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "register"]
+            },
+            "description": "Register a new user account"
+          }
+        },
+        {
+          "name": "Send Verification Code",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/send-code",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "send-code"]
+            },
+            "description": "Send verification code to email"
+          }
+        },
+        {
+          "name": "Verify Code",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"code\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/verify-code",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "verify-code"]
+            },
+            "description": "Verify email with code"
+          }
+        },
+        {
+          "name": "Validate Email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/validate-email",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "validate-email"]
+            },
+            "description": "Validate email format and availability"
+          }
+        },
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "JWT token"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "me"]
+            },
+            "description": "Get currently authenticated user information"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Marinas",
+      "item": [
+        {
+          "name": "Get Filter Options",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/marinas/filters",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "marinas", "filters"]
+            },
+            "description": "Get all available filter options for marina search (amenity types, anchorage types, etc.)"
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/marinas/filters"
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"amenityTypes\": [\n    {\n      \"id\": 1,\n      \"name\": \"Electricity\",\n      \"slug\": \"electricity\",\n      \"icon\": \"⚡\",\n      \"category\": \"utility\"\n    }\n  ],\n  \"anchorageTypes\": [],\n  \"mooringTypes\": [],\n  \"seabedTypes\": [],\n  \"pointTypes\": []\n}"
+            }
+          ]
+        },
+        {
+          "name": "Search Marinas (Basic)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/marinas/search?location=Miami&limit=10&offset=0",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "marinas", "search"],
+              "query": [
+                {
+                  "key": "location",
+                  "value": "Miami",
+                  "description": "Search by location"
+                },
+                {
+                  "key": "city",
+                  "value": "",
+                  "description": "Filter by city",
+                  "disabled": true
+                },
+                {
+                  "key": "state",
+                  "value": "",
+                  "description": "Filter by state",
+                  "disabled": true
+                },
+                {
+                  "key": "minPrice",
+                  "value": "",
+                  "description": "Minimum price per day",
+                  "disabled": true
+                },
+                {
+                  "key": "maxPrice",
+                  "value": "",
+                  "description": "Maximum price per day",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Results per page"
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Skip results"
+                }
+              ]
+            },
+            "description": "Basic marina search"
+          }
+        },
+        {
+          "name": "Search Marinas (Advanced)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/marinas/search-advanced?location=Miami&minPrice=50&maxPrice=200&checkIn=2025-12-01&checkOut=2025-12-07&minBoatLength=10&limit=10&offset=0",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "marinas", "search-advanced"],
+              "query": [
+                {
+                  "key": "location",
+                  "value": "Miami",
+                  "description": "Search by city, state, or marina name"
+                },
+                {
+                  "key": "city",
+                  "value": "",
+                  "description": "Filter by specific city",
+                  "disabled": true
+                },
+                {
+                  "key": "state",
+                  "value": "",
+                  "description": "Filter by specific state",
+                  "disabled": true
+                },
+                {
+                  "key": "checkIn",
+                  "value": "2025-12-01",
+                  "description": "Check-in date (YYYY-MM-DD)"
+                },
+                {
+                  "key": "checkOut",
+                  "value": "2025-12-07",
+                  "description": "Check-out date (YYYY-MM-DD)"
+                },
+                {
+                  "key": "minPrice",
+                  "value": "50",
+                  "description": "Minimum price per day"
+                },
+                {
+                  "key": "maxPrice",
+                  "value": "200",
+                  "description": "Maximum price per day"
+                },
+                {
+                  "key": "minBoatLength",
+                  "value": "10",
+                  "description": "Minimum boat length (meters)"
+                },
+                {
+                  "key": "amenities",
+                  "value": "",
+                  "description": "Comma-separated amenity IDs (e.g., 1,2,3)",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Results per page"
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Skip results"
+                }
+              ]
+            },
+            "description": "Advanced marina search with all filters"
+          }
+        },
+        {
+          "name": "Get Marina by Slug",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/marinas/miami-marina",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "marinas", "miami-marina"]
+            },
+            "description": "Get basic marina information by slug"
+          }
+        },
+        {
+          "name": "Get Marina Details (Full)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/marinas/detail/miami-marina",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "marinas", "detail", "miami-marina"]
+            },
+            "description": "Get complete marina details including amenities and reviews"
+          }
+        }
+      ]
+    }
+  ]
+}

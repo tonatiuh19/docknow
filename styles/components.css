@@ -1,0 +1,227 @@
+/* Utility Components Styles */
+
+/* Modern Button Styles */
+.btn-primary {
+  @apply bg-gradient-to-r from-ocean-600 to-ocean-700 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-300 shadow-lg hover:shadow-xl hover:transform hover:-translate-y-1;
+}
+
+.btn-secondary {
+  @apply bg-white text-ocean-600 border-2 border-ocean-600 px-6 py-3 rounded-xl font-semibold transition-all duration-300 hover:bg-ocean-50 hover:transform hover:-translate-y-1;
+}
+
+.btn-outline {
+  @apply border-2 border-ocean-600 text-ocean-600 px-6 py-3 rounded-xl font-semibold transition-all duration-300 hover:bg-ocean-600 hover:text-white hover:transform hover:-translate-y-1;
+}
+
+.btn-ghost {
+  @apply text-ocean-600 px-6 py-3 rounded-xl font-semibold transition-all duration-300 hover:bg-ocean-50 hover:transform hover:-translate-y-1;
+}
+
+/* Card Styles */
+.card-modern {
+  @apply bg-white rounded-2xl shadow-lg border border-gray-100 p-6 transition-all duration-300 hover:shadow-xl hover:transform hover:-translate-y-2;
+}
+
+.card-glass {
+  @apply bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20 p-6 transition-all duration-300;
+}
+
+.card-featured {
+  @apply bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden transition-all duration-300 hover:shadow-2xl hover:transform hover:-translate-y-3;
+}
+
+/* Input Styles */
+.input-modern {
+  @apply w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-ocean-500 focus:border-transparent transition-all duration-300 text-gray-700 placeholder-gray-400;
+}
+
+.input-icon {
+  @apply pl-10 pr-4;
+}
+
+/* Typography */
+.heading-primary {
+  @apply text-4xl md:text-5xl lg:text-6xl font-bold text-navy-800 leading-tight;
+}
+
+.heading-secondary {
+  @apply text-3xl md:text-4xl font-bold text-navy-800 leading-tight;
+}
+
+.heading-tertiary {
+  @apply text-2xl md:text-3xl font-bold text-navy-800 leading-tight;
+}
+
+.text-large {
+  @apply text-xl text-gray-600 leading-relaxed;
+}
+
+.text-muted {
+  @apply text-gray-500;
+}
+
+/* Section Styles */
+.section-padding {
+  @apply py-20;
+}
+
+.section-container {
+  @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+}
+
+.section-header {
+  @apply text-center mb-16;
+}
+
+/* Grid Layouts */
+.grid-cards {
+  @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8;
+}
+
+.grid-features {
+  @apply grid grid-cols-1 md:grid-cols-3 gap-8;
+}
+
+.grid-hero {
+  @apply grid grid-cols-1 lg:grid-cols-2 gap-12 items-center;
+}
+
+/* Animation Classes */
+.animate-fade-in {
+  animation: fadeIn 0.6s ease-out;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.6s ease-out;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.4s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Hover Effects */
+.hover-lift {
+  @apply transition-all duration-300 hover:transform hover:-translate-y-2 hover:shadow-lg;
+}
+
+.hover-grow {
+  @apply transition-transform duration-300 hover:scale-105;
+}
+
+.hover-glow {
+  @apply transition-all duration-300 hover:shadow-2xl;
+}
+
+/* Background Patterns */
+.bg-dots {
+  background-image: radial-gradient(circle, #e5e7eb 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.bg-grid {
+  background-image: linear-gradient(to right, #f3f4f6 1px, transparent 1px),
+    linear-gradient(to bottom, #f3f4f6 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* Status Indicators */
+.status-available {
+  @apply bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium;
+}
+
+.status-occupied {
+  @apply bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-medium;
+}
+
+.status-maintenance {
+  @apply bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-medium;
+}
+
+/* Loading States */
+.loading-skeleton {
+  @apply animate-pulse bg-gray-200 rounded;
+}
+
+.loading-shimmer {
+  @apply rounded;
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Custom Scrollbar */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #0284c7 #f1f5f9;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  @apply bg-gray-100 rounded;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  @apply bg-ocean-600 rounded hover:bg-ocean-700;
+}
+
+/* Responsive Utilities */
+.container-responsive {
+  @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+}
+
+.text-responsive {
+  @apply text-base md:text-lg lg:text-xl;
+}
+
+.spacing-responsive {
+  @apply space-y-4 md:space-y-6 lg:space-y-8;
+}
+
+/* Focus States */
+.focus-ocean {
+  @apply focus:ring-2 focus:ring-ocean-500 focus:ring-offset-2 focus:outline-none;
+}
+
+/* Gradient Text */
+.text-gradient-ocean {
+  @apply bg-gradient-to-r from-ocean-600 to-ocean-400 bg-clip-text text-transparent;
+}
+
+.text-gradient-sunset {
+  @apply bg-gradient-to-r from-orange-500 to-red-500 bg-clip-text text-transparent;
+}
+
+/* Badge Styles */
+.badge-primary {
+  @apply bg-ocean-100 text-ocean-800 px-3 py-1 rounded-full text-sm font-medium;
+}
+
+.badge-secondary {
+  @apply bg-gray-100 text-gray-800 px-3 py-1 rounded-full text-sm font-medium;
+}
+
+.badge-success {
+  @apply bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium;
+}
+
+.badge-warning {
+  @apply bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-medium;
+}
+
+.badge-error {
+  @apply bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-medium;
+}
