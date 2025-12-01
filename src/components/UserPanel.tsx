@@ -86,13 +86,6 @@ export default function UserPanel({
       description: "Track your reservations",
     },
     {
-      icon: FaAnchor,
-      label: "My Marinas",
-      href: "/my-marinas",
-      color: "from-indigo-500 to-purple-500",
-      description: "Manage your marinas",
-    },
-    {
       icon: FaCog,
       label: "Settings",
       href: "/settings",

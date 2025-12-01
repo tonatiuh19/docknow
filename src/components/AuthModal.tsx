@@ -71,6 +71,21 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = "hidden";
+      // Reset modal state when opening
+      setStep("email");
+      setFormData({
+        email: "",
+        fullName: "",
+        phone: "",
+        phoneCode: "+52",
+        countryCode: "MX",
+        dateOfBirth: "",
+      });
+      setFormErrors({});
+      setVerificationCode("");
+      setError("");
+      setUserId(null);
+      setResendTimer(0);
     } else {
       document.body.style.overflow = "unset";
     }
@@ -534,7 +549,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                           ? "border-red-500 focus:border-red-500 focus:ring-red-500/50"
                           : "border-gray-600 focus:border-cyan-500 focus:ring-cyan-500/50"
                       }`}
-                      placeholder="1234567890"
+                      placeholder="474 123 4567"
                       disabled={loading}
                     />
                     {formErrors.phone && (
