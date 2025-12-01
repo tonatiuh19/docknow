@@ -3,12 +3,24 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
+import { useStore } from "@/store/store";
+import AuthModal from "./AuthModal";
+import UserPanel from "./UserPanel";
+import { FaChevronRight, FaUser } from "react-icons/fa";
+import { HiMenu } from "react-icons/hi";
 
 export default function Header() {
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showUserPanel, setShowUserPanel] = useState(false);
   const isHomePage = pathname === "/";
   const isMahinasPage = pathname === "/marinas";
+
+  // Use separate selectors to avoid object recreation
+  const user = useStore((state) => state.user);
+  const isAuthenticated = useStore((state) => state.isAuthenticated);
+  const logout = useStore((state) => state.logout);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -56,9 +68,9 @@ export default function Header() {
             </div>
           </Link>
 
-          {/* CTA Button - Hide on marinas page */}
-          {!isMahinasPage && (
-            <div className="hidden md:block">
+          {/* CTA Buttons - Available on all pages */}
+          <div className="hidden md:flex items-center gap-3">
+            {!isMahinasPage && (
               <Link
                 href="/marinas"
                 className="group relative inline-flex items-center gap-2 px-6 py-2.5 rounded-full font-semibold text-white overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 hover:scale-105"
@@ -74,23 +86,35 @@ export default function Header() {
 
                 <span className="relative z-10 flex items-center gap-2">
                   Book Now
-                  <svg
-                    className="w-4 h-4 transition-transform group-hover:translate-x-1 duration-300"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 5l7 7-7 7"
-                    />
-                  </svg>
+                  <FaChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-1 duration-300" />
                 </span>
               </Link>
-            </div>
-          )}
+            )}
+
+            {/* User Icon */}
+            <button
+              onClick={() =>
+                isAuthenticated
+                  ? setShowUserPanel(true)
+                  : setShowAuthModal(true)
+              }
+              className={`relative p-2.5 rounded-full transition-all duration-300 ${
+                isAuthenticated
+                  ? "bg-gradient-to-br from-cyan-500 to-blue-500 text-white shadow-lg hover:shadow-xl hover:scale-110"
+                  : scrolled || !isHomePage
+                  ? "bg-gray-700/50 border border-gray-600/50 text-white hover:bg-gray-600/50"
+                  : "bg-white/20 border border-white/30 text-white hover:bg-white/30"
+              }`}
+            >
+              {isAuthenticated ? (
+                <div className="w-6 h-6 flex items-center justify-center font-semibold">
+                  {user?.full_name?.charAt(0).toUpperCase() || "U"}
+                </div>
+              ) : (
+                <FaUser className="w-6 h-6" />
+              )}
+            </button>
+          </div>
 
           {/* Mobile menu button */}
           <button
@@ -100,19 +124,7 @@ export default function Header() {
                 : "bg-gray-700/50 border-gray-600/50 text-white hover:bg-gray-600/50"
             }`}
           >
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 6h16M4 12h16M4 18h16"
-              />
-            </svg>
+            <HiMenu className="w-6 h-6" />
           </button>
         </div>
       </div>
@@ -125,6 +137,20 @@ export default function Header() {
             : "via-gray-700/50 opacity-100"
         }`}
       ></div>
+
+      {/* Auth Modal */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+      />
+
+      {/* User Panel */}
+      <UserPanel
+        isOpen={showUserPanel}
+        onClose={() => setShowUserPanel(false)}
+        user={user}
+        onLogout={logout}
+      />
     </header>
   );
 }

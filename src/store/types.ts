@@ -7,12 +7,19 @@ export type { Marina };
 export interface User {
   id: number;
   email: string;
-  name: string;
-  role: "admin" | "general_admin" | "receptionist" | "doctor" | "customer";
+  name?: string;
+  full_name: string;
+  role?: "admin" | "general_admin" | "receptionist" | "doctor" | "customer";
+  user_type?: "guest" | "host" | "admin";
   profile_picture_url?: string;
+  profile_image_url?: string;
   specialization?: string;
   employee_id?: string;
   is_active: boolean;
+  phone?: string;
+  phone_code?: string;
+  country_code?: string;
+  date_of_birth?: string;
 }
 
 export interface Port {
