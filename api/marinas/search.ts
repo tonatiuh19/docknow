@@ -105,25 +105,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       params.push(searchPattern, searchPattern, searchPattern);
     }
 
-    // Base query with availability check
+    // Base query with slip-level availability check
     let availabilityJoin = "";
     if (checkIn && checkOut) {
-      // Check if marina is available during the requested dates
+      // Updated to check slip-level availability
+      // A marina is available if it has at least one slip that is:
+      // 1. Not fully booked for the date range
+      // 2. Not blocked for the entire date range (marina-wide or all slips blocked)
       availabilityJoin = `
-        LEFT JOIN (
-          SELECT marina_id
-          FROM bookings
-          WHERE status IN ('pending', 'confirmed')
-            AND (
-              (check_in_date <= ? AND check_out_date >= ?)
-              OR (check_in_date <= ? AND check_out_date >= ?)
-              OR (check_in_date >= ? AND check_out_date <= ?)
-            )
-          UNION
-          SELECT marina_id
-          FROM blocked_dates
-          WHERE blocked_date BETWEEN ? AND ?
-        ) AS unavailable ON m.id = unavailable.marina_id
+        INNER JOIN (
+          SELECT DISTINCT m.id as marina_id
+          FROM marinas m
+          WHERE EXISTS (
+            SELECT 1
+            FROM slips s
+            WHERE s.marina_id = m.id
+              AND s.is_available = 1
+              -- Slip not booked during requested dates
+              AND NOT EXISTS (
+                SELECT 1
+                FROM bookings b
+                WHERE b.slip_id = s.id
+                  AND b.status IN ('pending', 'confirmed')
+                  AND (
+                    (b.check_in_date <= ? AND b.check_out_date >= ?)
+                    OR (b.check_in_date <= ? AND b.check_out_date >= ?)
+                    OR (b.check_in_date >= ? AND b.check_out_date <= ?)
+                  )
+              )
+              -- Slip not blocked during requested dates
+              AND NOT EXISTS (
+                SELECT 1
+                FROM blocked_dates bd
+                WHERE (bd.slip_id = s.id OR bd.slip_id IS NULL)
+                  AND bd.marina_id = m.id
+                  AND bd.blocked_date BETWEEN ? AND ?
+              )
+          )
+        ) AS available_marinas ON m.id = available_marinas.marina_id
       `;
       params.push(
         checkIn,
@@ -135,7 +154,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         checkIn,
         checkOut
       );
-      conditions.push("unavailable.marina_id IS NULL");
     }
 
     // Amenities filter

@@ -20,7 +20,9 @@ import {
   MdSecurity,
   MdElectricBolt,
 } from "react-icons/md";
+import { useState } from "react";
 import { AmenityType, BusinessType } from "@/store/slices/marinaSlice";
+import DateAvailabilityCalendar from "./DateAvailabilityCalendar";
 
 interface MarinaFilterSidebarProps {
   filters: {
@@ -77,6 +79,12 @@ export default function MarinaFilterSidebar({
   onApplyFilters,
   onClearFilters,
 }: MarinaFilterSidebarProps) {
+  const [showCalendar, setShowCalendar] = useState(false);
+
+  const handleDateSelect = (checkIn: string, checkOut: string | null) => {
+    onFilterChange({ checkIn, checkOut });
+  };
+
   return (
     <div className="backdrop-blur-xl bg-white/70 border border-gray-200/50 rounded-3xl shadow-xl h-full flex flex-col overflow-hidden">
       <div className="flex items-center justify-between p-6 border-b border-gray-200/50 flex-shrink-0 bg-gradient-to-b from-white/50 to-transparent">
@@ -143,31 +151,40 @@ export default function MarinaFilterSidebar({
         <div className="mb-6">
           <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
             <FaCalendarAlt className="text-ocean-600" />
-            Check-in Date
+            Availability Dates
           </label>
-          <input
-            type="date"
-            value={filters.checkIn || ""}
-            onChange={(e) =>
-              onFilterChange({ checkIn: e.target.value || null })
-            }
-            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ocean-500 focus:border-transparent transition-all"
-          />
-        </div>
+          <button
+            onClick={() => setShowCalendar(!showCalendar)}
+            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-left hover:border-ocean-500 focus:ring-2 focus:ring-ocean-500 focus:border-transparent transition-all bg-white"
+          >
+            {filters.checkIn && filters.checkOut ? (
+              <span className="text-gray-900">
+                {new Date(filters.checkIn).toLocaleDateString()} -{" "}
+                {new Date(filters.checkOut).toLocaleDateString()}
+              </span>
+            ) : filters.checkIn ? (
+              <span className="text-gray-900">
+                Check-in: {new Date(filters.checkIn).toLocaleDateString()}
+              </span>
+            ) : (
+              <span className="text-gray-500">Select dates...</span>
+            )}
+          </button>
 
-        <div className="mb-6">
-          <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-            <FaCalendarAlt className="text-ocean-600" />
-            Check-out Date
-          </label>
-          <input
-            type="date"
-            value={filters.checkOut || ""}
-            onChange={(e) =>
-              onFilterChange({ checkOut: e.target.value || null })
-            }
-            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ocean-500 focus:border-transparent transition-all"
-          />
+          {showCalendar && (
+            <div className="mt-3 -mx-2">
+              <DateAvailabilityCalendar
+                bookedDates={[]}
+                blockedDates={[]}
+                availableSlips={[]}
+                selectedCheckIn={filters.checkIn}
+                selectedCheckOut={filters.checkOut}
+                onDateSelect={handleDateSelect}
+                minDate={new Date().toISOString().split("T")[0]}
+                showLegend={false}
+              />
+            </div>
+          )}
         </div>
 
         {/* Price Range */}

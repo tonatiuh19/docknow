@@ -9,6 +9,7 @@ import Header from "@/components/Header";
 import MarinaCard from "@/components/marina/MarinaCard";
 import MarinaFilterSidebar from "@/components/marina/MarinaFilterSidebar";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import Pagination from "@/components/Pagination";
 
 const MarinaMap = dynamic(() => import("@/components/MarinaMap"), {
   ssr: false,
@@ -32,11 +33,14 @@ export default function MarinasPage() {
     setMarinaFilters,
     filterOptions,
     filterOptionsLoading,
+    marinaPagination,
   } = useMarinas();
 
   const [showFilters, setShowFilters] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
   const [selectedMarinaId, setSelectedMarinaId] = useState<number | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   // Fetch marinas on mount only
   useEffect(() => {
@@ -56,10 +60,19 @@ export default function MarinasPage() {
   const loading = marinasLoading === "loading";
 
   const handleApplyFilters = () => {
+    setCurrentPage(1);
     fetchMarinas();
   };
 
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    const offset = (page - 1) * itemsPerPage;
+    fetchMarinas(offset, itemsPerPage);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const clearFilters = () => {
+    setCurrentPage(1);
     setMarinaFilters({
       search: "",
       city: null,
@@ -129,10 +142,10 @@ export default function MarinasPage() {
             <main className="flex-1 overflow-y-auto">
               <div className="mb-6 flex items-center justify-between flex-wrap gap-4">
                 <div>
-                  <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                  {/* <h1 className="text-3xl font-bold text-gray-900 mb-2">
                     {marinas.length} Marina{marinas.length !== 1 ? "s" : ""}{" "}
                     Available
-                  </h1>
+                  </h1> */}
                   <p className="text-gray-600">
                     {marinaFilters.search &&
                       `Searching for: ${marinaFilters.search}`}
@@ -218,11 +231,27 @@ export default function MarinasPage() {
                   />
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-6">
-                  {marinas.map((marina) => (
-                    <MarinaCard key={marina.id} marina={marina} />
-                  ))}
-                </div>
+                <>
+                  <div className="grid grid-cols-1 gap-6">
+                    {marinas.map((marina) => (
+                      <MarinaCard key={marina.id} marina={marina} />
+                    ))}
+                  </div>
+
+                  {/* Pagination */}
+                  {marinaPagination &&
+                    marinaPagination.total > itemsPerPage && (
+                      <Pagination
+                        currentPage={currentPage}
+                        totalPages={Math.ceil(
+                          marinaPagination.total / itemsPerPage
+                        )}
+                        totalItems={marinaPagination.total}
+                        itemsPerPage={itemsPerPage}
+                        onPageChange={handlePageChange}
+                      />
+                    )}
+                </>
               )}
             </main>
           </div>

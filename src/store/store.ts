@@ -61,6 +61,10 @@ export const useMarinas = () => {
   const marinas = useStore((state) => state.marinas);
   const marinasLoading = useStore((state) => state.marinasLoading);
   const selectedMarina = useStore((state) => state.selectedMarina);
+  const marinaAvailability = useStore((state) => state.marinaAvailability);
+  const marinaAvailabilityLoading = useStore(
+    (state) => state.marinaAvailabilityLoading
+  );
   const marinaFilters = useStore((state) => state.marinaFilters);
   const marinaPagination = useStore((state) => state.marinaPagination);
   const filterOptions = useStore((state) => state.filterOptions);
@@ -68,6 +72,9 @@ export const useMarinas = () => {
   const fetchMarinas = useStore((state) => state.fetchMarinas);
   const fetchFilterOptions = useStore((state) => state.fetchFilterOptions);
   const fetchMarinaById = useStore((state) => state.fetchMarinaById);
+  const fetchMarinaAvailability = useStore(
+    (state) => state.fetchMarinaAvailability
+  );
   const createMarina = useStore((state) => state.createMarina);
   const updateMarina = useStore((state) => state.updateMarina);
   const deleteMarina = useStore((state) => state.deleteMarina);
@@ -80,6 +87,8 @@ export const useMarinas = () => {
     marinas,
     marinasLoading,
     selectedMarina,
+    marinaAvailability,
+    marinaAvailabilityLoading,
     marinaFilters,
     marinaPagination,
     filterOptions,
@@ -87,6 +96,7 @@ export const useMarinas = () => {
     fetchMarinas,
     fetchFilterOptions,
     fetchMarinaById,
+    fetchMarinaAvailability,
     createMarina,
     updateMarina,
     deleteMarina,

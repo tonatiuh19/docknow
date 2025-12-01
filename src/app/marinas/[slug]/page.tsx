@@ -3,6 +3,35 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import {
+  FiMapPin,
+  FiStar,
+  FiAnchor,
+  FiMaximize2,
+  FiMail,
+  FiPhone,
+  FiGlobe,
+  FiUser,
+  FiArrowLeft,
+  FiDollarSign,
+  FiCalendar,
+} from "react-icons/fi";
+import { useStore } from "@/store/store";
+import LoadingSpinner from "@/components/LoadingSpinner";
+import ImageCarousel from "@/components/marina/ImageCarousel";
+import DateAvailabilityCalendar from "@/components/marina/DateAvailabilityCalendar";
+import AmenityIcon from "@/components/marina/AmenityIcon";
+import dynamic from "next/dynamic";
+
+// Dynamically import MarinaMap to avoid SSR issues with Leaflet
+const MarinaMap = dynamic(() => import("@/components/MarinaMap"), {
+  ssr: false,
+  loading: () => (
+    <div className="bg-gray-200 rounded-lg h-64 flex items-center justify-center">
+      <LoadingSpinner size="sm" message="Loading map..." />
+    </div>
+  ),
+});
 
 interface MarinaDetails {
   id: number;
@@ -80,13 +109,20 @@ interface MarinaDetails {
 export default function MarinaDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const slug = params.slug as string;
+  const slug = (params?.slug as string) || "";
+
+  const marinaAvailability = useStore((state) => state.marinaAvailability);
+  const marinaAvailabilityLoading = useStore(
+    (state) => state.marinaAvailabilityLoading
+  );
+  const fetchMarinaAvailability = useStore(
+    (state) => state.fetchMarinaAvailability
+  );
 
   const [marina, setMarina] = useState<MarinaDetails | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedImage, setSelectedImage] = useState(0);
-  const [checkIn, setCheckIn] = useState("");
-  const [checkOut, setCheckOut] = useState("");
+  const [checkIn, setCheckIn] = useState<string | null>(null);
+  const [checkOut, setCheckOut] = useState<string | null>(null);
 
   useEffect(() => {
     fetchMarinaDetails();
@@ -99,6 +135,10 @@ export default function MarinaDetailPage() {
 
       if (data.success) {
         setMarina(data.data);
+        // Fetch availability data using the marina ID
+        if (data.data?.id) {
+          fetchMarinaAvailability(data.data.id);
+        }
       }
     } catch (error) {
       console.error("Error fetching marina details:", error);
@@ -119,6 +159,11 @@ export default function MarinaDetailPage() {
     return days * marina.pricePerDay;
   };
 
+  const handleDateSelect = (newCheckIn: string, newCheckOut: string | null) => {
+    setCheckIn(newCheckIn);
+    setCheckOut(newCheckOut);
+  };
+
   const handleBooking = () => {
     if (!checkIn || !checkOut) {
       alert("Please select check-in and check-out dates");
@@ -131,10 +176,7 @@ export default function MarinaDetailPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin text-6xl mb-4">⚓</div>
-          <p className="text-gray-600">Loading marina details...</p>
-        </div>
+        <LoadingSpinner size="xl" message="Loading marina details..." />
       </div>
     );
   }
@@ -143,12 +185,16 @@ export default function MarinaDetailPage() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="text-6xl mb-4">🏴</div>
+          <FiAnchor className="w-24 h-24 mx-auto mb-4 text-gray-400" />
           <h2 className="text-2xl font-bold text-gray-900 mb-2">
             Marina not found
           </h2>
-          <Link href="/marinas" className="text-ocean-600 hover:text-ocean-700">
-            ← Back to search
+          <Link
+            href="/marinas"
+            className="text-ocean-600 hover:text-ocean-700 inline-flex items-center gap-2"
+          >
+            <FiArrowLeft className="w-4 h-4" />
+            Back to search
           </Link>
         </div>
       </div>
@@ -174,9 +220,10 @@ export default function MarinaDetailPage() {
         <div className="max-w-7xl mx-auto px-4 py-4">
           <Link
             href="/marinas"
-            className="text-ocean-600 hover:text-ocean-700 font-medium"
+            className="text-ocean-600 hover:text-ocean-700 font-medium inline-flex items-center gap-2 transition-colors"
           >
-            ← Back to search
+            <FiArrowLeft className="w-4 h-4" />
+            Back to search
           </Link>
         </div>
       </header>
@@ -190,49 +237,33 @@ export default function MarinaDetailPage() {
                 {marina.name}
                 {marina.isFeatured && (
                   <span className="ml-3 inline-block bg-yellow-400 text-yellow-900 px-3 py-1 rounded-full text-sm font-semibold">
-                    ⭐ Featured
+                    <FiStar className="inline w-4 h-4 mr-1" />
+                    Featured
+                  </span>
+                )}
+                {marina.reviews.length === 0 && (
+                  <span className="ml-3 inline-block bg-ocean-500 text-white px-3 py-1 rounded-full text-sm font-semibold">
+                    New
                   </span>
                 )}
               </h1>
               <div className="flex items-center gap-4 text-gray-600">
                 <span className="flex items-center gap-1">
-                  <span className="text-yellow-500">⭐</span>
+                  <FiStar className="w-4 h-4 text-yellow-500 fill-yellow-500" />
                   <span className="font-semibold">{marina.rating.average}</span>
                   <span>({marina.rating.count} reviews)</span>
                 </span>
-                <span>
-                  📍 {marina.location.city}, {marina.location.state}
+                <span className="flex items-center gap-1">
+                  <FiMapPin className="w-4 h-4" />
+                  {marina.location.city}, {marina.location.state}
                 </span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Image Gallery */}
-        <div className="mb-8">
-          <div className="grid grid-cols-4 gap-2 rounded-xl overflow-hidden">
-            <div className="col-span-4 md:col-span-2 md:row-span-2 h-96 md:h-full">
-              <img
-                src={marina.images[selectedImage]?.url || marina.images[0]?.url}
-                alt={marina.name}
-                className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition"
-              />
-            </div>
-            {marina.images.slice(1, 5).map((image, index) => (
-              <div
-                key={image.id}
-                className="h-48 cursor-pointer"
-                onClick={() => setSelectedImage(index + 1)}
-              >
-                <img
-                  src={image.url}
-                  alt={image.title}
-                  className="w-full h-full object-cover hover:opacity-90 transition"
-                />
-              </div>
-            ))}
-          </div>
-        </div>
+        {/* Image Carousel */}
+        <ImageCarousel images={marina.images} marinaName={marina.name} />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main Content */}
@@ -260,7 +291,12 @@ export default function MarinaDetailPage() {
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 {marina.amenities.map((amenity) => (
                   <div key={amenity.id} className="flex items-center gap-2">
-                    <span className="text-2xl">{amenity.icon}</span>
+                    <div className="text-ocean-600">
+                      <AmenityIcon
+                        iconName={amenity.icon}
+                        className="w-5 h-5"
+                      />
+                    </div>
                     <span className="text-gray-700">{amenity.name}</span>
                   </div>
                 ))}
@@ -275,30 +311,34 @@ export default function MarinaDetailPage() {
               <div className="grid grid-cols-2 gap-6">
                 <div>
                   <div className="text-gray-600 text-sm mb-1">Total Slips</div>
-                  <div className="text-2xl font-bold text-gray-900">
-                    🚢 {marina.capacity.totalSlips}
+                  <div className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                    <FiAnchor className="w-6 h-6 text-ocean-600" />
+                    {marina.capacity.totalSlips}
                   </div>
                 </div>
                 <div>
                   <div className="text-gray-600 text-sm mb-1">
                     Available Slips
                   </div>
-                  <div className="text-2xl font-bold text-green-600">
-                    ✓ {marina.capacity.availableSlips}
+                  <div className="text-2xl font-bold text-green-600 flex items-center gap-2">
+                    <FiAnchor className="w-6 h-6" />
+                    {marina.capacity.availableSlips}
                   </div>
                 </div>
                 <div>
                   <div className="text-gray-600 text-sm mb-1">
                     Max Boat Length
                   </div>
-                  <div className="text-2xl font-bold text-gray-900">
-                    📏 {marina.capacity.maxBoatLength}m
+                  <div className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                    <FiMaximize2 className="w-6 h-6 text-ocean-600" />
+                    {marina.capacity.maxBoatLength}m
                   </div>
                 </div>
                 <div>
                   <div className="text-gray-600 text-sm mb-1">Max Draft</div>
-                  <div className="text-2xl font-bold text-gray-900">
-                    ⚓ {marina.capacity.maxBoatDraft}m
+                  <div className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                    <FiAnchor className="w-6 h-6 text-ocean-600" />
+                    {marina.capacity.maxBoatDraft}m
                   </div>
                 </div>
               </div>
@@ -310,37 +350,58 @@ export default function MarinaDetailPage() {
                 Location
               </h2>
               <div className="space-y-2 mb-4">
-                <p className="text-gray-700">📍 {marina.location.address}</p>
+                <p className="text-gray-700 flex items-center gap-2">
+                  <FiMapPin className="w-4 h-4 text-ocean-600" />
+                  {marina.location.address}
+                </p>
                 <p className="text-gray-700">
                   {marina.location.city}, {marina.location.state}{" "}
                   {marina.location.postalCode}
                 </p>
                 <p className="text-gray-700">{marina.location.country}</p>
               </div>
-              {/* Map placeholder */}
-              <div className="bg-gray-200 rounded-lg h-64 flex items-center justify-center">
-                <div className="text-center text-gray-500">
-                  <div className="text-4xl mb-2">🗺️</div>
-                  <p>Map view</p>
-                  <p className="text-sm">
-                    {marina.location.coordinates.latitude.toFixed(4)},{" "}
-                    {marina.location.coordinates.longitude.toFixed(4)}
-                  </p>
-                </div>
+              {/* Interactive Map */}
+              <div
+                className="rounded-lg overflow-hidden h-80"
+                id="marina-detail-map"
+              >
+                <MarinaMap
+                  marinas={[
+                    {
+                      id: marina.id,
+                      name: marina.name,
+                      slug: marina.slug,
+                      description: marina.description,
+                      location: `${marina.location.city}, ${marina.location.state}`,
+                      coordinates: {
+                        lat: marina.location.coordinates.latitude,
+                        lng: marina.location.coordinates.longitude,
+                      },
+                      contact_email: marina.contact.email,
+                      contact_phone: marina.contact.phone,
+                      image_url:
+                        marina.images.find((img) => img.isPrimary)?.url ||
+                        marina.images[0]?.url,
+                      price_per_day: marina.pricePerDay,
+                      is_active: true,
+                      is_featured: marina.isFeatured,
+                      created_at: new Date().toISOString(),
+                      updated_at: new Date().toISOString(),
+                    },
+                  ]}
+                  height="320px"
+                  selectedMarinaId={marina.id}
+                />
               </div>
             </div>
 
             {/* Reviews */}
-            <div className="bg-white rounded-xl shadow-md p-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">
-                Reviews ({marina.rating.count})
-              </h2>
+            {marina.reviews.length > 0 && (
+              <div className="bg-white rounded-xl shadow-md p-6">
+                <h2 className="text-2xl font-bold text-gray-900 mb-4">
+                  Reviews ({marina.rating.count})
+                </h2>
 
-              {marina.reviews.length === 0 ? (
-                <p className="text-gray-600">
-                  No reviews yet. Be the first to review!
-                </p>
-              ) : (
                 <div className="space-y-4">
                   {marina.reviews.map((review) => (
                     <div
@@ -356,8 +417,15 @@ export default function MarinaDetailPage() {
                             <span className="font-semibold text-gray-900">
                               {review.user.name}
                             </span>
-                            <span className="text-yellow-500">
-                              {"⭐".repeat(review.rating)}
+                            <span className="flex items-center gap-0.5 text-yellow-500">
+                              {Array.from({ length: review.rating }).map(
+                                (_, i) => (
+                                  <FiStar
+                                    key={i}
+                                    className="w-4 h-4 fill-yellow-500"
+                                  />
+                                )
+                              )}
                             </span>
                           </div>
                           <p className="text-gray-700 mb-1">{review.comment}</p>
@@ -369,76 +437,38 @@ export default function MarinaDetailPage() {
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
-
-            {/* Contact */}
-            <div className="bg-white rounded-xl shadow-md p-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">
-                Contact Marina
-              </h2>
-              <div className="space-y-3">
-                {marina.contact.name && (
-                  <p className="text-gray-700">👤 {marina.contact.name}</p>
-                )}
-                {marina.contact.email && (
-                  <p className="text-gray-700">✉️ {marina.contact.email}</p>
-                )}
-                {marina.contact.phone && (
-                  <p className="text-gray-700">📞 {marina.contact.phone}</p>
-                )}
-                {marina.contact.website && (
-                  <a
-                    href={marina.contact.website}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-ocean-600 hover:text-ocean-700"
-                  >
-                    🌐 Visit Website
-                  </a>
-                )}
               </div>
-            </div>
+            )}
           </div>
 
           {/* Booking Card - Sticky */}
           <div className="lg:col-span-1">
-            <div className="bg-white rounded-xl shadow-xl p-6 sticky top-24">
-              <div className="mb-6">
-                <div className="text-3xl font-bold text-ocean-600 mb-1">
-                  ${marina.pricePerDay}
+            <div className="bg-white rounded-xl shadow-xl p-6 sticky top-24 space-y-6">
+              <div>
+                <div className="text-3xl font-bold text-ocean-600 mb-1 flex items-center gap-2">
+                  <FiDollarSign className="w-8 h-8" />
+                  {marina.pricePerDay}
                 </div>
                 <div className="text-gray-600">per day</div>
               </div>
 
-              {/* Date Selection */}
-              <div className="space-y-4 mb-6">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    📅 Check-in
-                  </label>
-                  <input
-                    type="date"
-                    value={checkIn}
-                    min={today}
-                    onChange={(e) => setCheckIn(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ocean-500 focus:border-transparent"
-                  />
+              {/* Date Availability Calendar */}
+              {marinaAvailabilityLoading === "loading" ? (
+                <div className="py-8">
+                  <LoadingSpinner size="sm" message="Loading availability..." />
                 </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    📅 Check-out
-                  </label>
-                  <input
-                    type="date"
-                    value={checkOut}
-                    min={checkIn || today}
-                    onChange={(e) => setCheckOut(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ocean-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
+              ) : (
+                <DateAvailabilityCalendar
+                  bookedDates={marinaAvailability?.bookedDates || []}
+                  blockedDates={marinaAvailability?.blockedDates || []}
+                  availableSlips={marinaAvailability?.availableSlips || []}
+                  selectedCheckIn={checkIn}
+                  selectedCheckOut={checkOut}
+                  onDateSelect={handleDateSelect}
+                  minDate={today}
+                  totalSlips={marina?.capacity?.totalSlips}
+                />
+              )}
 
               {/* Price Breakdown */}
               {checkIn && checkOut && totalDays > 0 && (
@@ -460,27 +490,12 @@ export default function MarinaDetailPage() {
                 </div>
               )}
 
-              {/* Coupons */}
-              {marina.coupons.length > 0 && (
-                <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-                  <div className="text-sm font-semibold text-green-800 mb-2">
-                    🎉 Available Discounts
-                  </div>
-                  {marina.coupons.map((coupon, index) => (
-                    <div key={index} className="text-sm text-green-700">
-                      <span className="font-mono bg-green-100 px-2 py-1 rounded">
-                        {coupon.code}
-                      </span>{" "}
-                      - {coupon.description}
-                    </div>
-                  ))}
-                </div>
-              )}
-
               <button
                 onClick={handleBooking}
-                className="w-full bg-ocean-600 hover:bg-ocean-700 text-white font-semibold py-4 rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl"
+                disabled={!checkIn || !checkOut}
+                className="w-full bg-ocean-600 hover:bg-ocean-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold py-4 rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
               >
+                <FiCalendar className="w-5 h-5" />
                 Reserve Now
               </button>
 

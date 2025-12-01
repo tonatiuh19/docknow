@@ -39,11 +39,45 @@ export interface FilterOptions {
   };
 }
 
+// Booking Availability Types
+export interface BookedDate {
+  checkIn: string;
+  checkOut: string;
+}
+
+export interface BlockedDate {
+  date: string;
+  reason: string;
+  isAllDay?: boolean;
+  startTime?: string;
+  endTime?: string;
+  slipId?: number | null; // null = entire marina blocked, number = specific slip
+  slipNumber?: string;
+}
+
+export interface Slip {
+  id: number;
+  slipNumber: string;
+  length: number;
+  width: number;
+  depth: number;
+  pricePerDay: number;
+  isAvailable: boolean;
+}
+
+export interface MarinaAvailability {
+  bookedDates: BookedDate[];
+  blockedDates: BlockedDate[];
+  availableSlips: Slip[];
+}
+
 // Marina State
 export interface MarinaState {
   marinas: Marina[];
   selectedMarina: Marina | null;
   marinasLoading: LoadingState;
+  marinaAvailability: MarinaAvailability | null;
+  marinaAvailabilityLoading: LoadingState;
   filterOptions: FilterOptions | null;
   filterOptionsLoading: LoadingState;
   marinaFilters: {
@@ -71,9 +105,10 @@ export interface MarinaState {
 
 // Marina Actions
 export interface MarinaActions {
-  fetchMarinas: () => Promise<void>;
+  fetchMarinas: (offset?: number, limit?: number) => Promise<void>;
   fetchFilterOptions: () => Promise<void>;
   fetchMarinaById: (id: number) => Promise<void>;
+  fetchMarinaAvailability: (marinaId: number) => Promise<void>;
   createMarina: (data: Partial<Marina>) => Promise<void>;
   updateMarina: (id: number, data: Partial<Marina>) => Promise<void>;
   deleteMarina: (id: number) => Promise<void>;
@@ -91,6 +126,8 @@ const initialMarinaState: MarinaState = {
   marinas: [],
   selectedMarina: null,
   marinasLoading: "idle",
+  marinaAvailability: null,
+  marinaAvailabilityLoading: "idle",
   filterOptions: null,
   filterOptionsLoading: "idle",
   marinaFilters: {
@@ -125,19 +162,23 @@ export const createMarinaSlice: StateCreator<
 > = (set, get) => ({
   ...initialMarinaState,
 
-  fetchMarinas: async () => {
+  fetchMarinas: async (offset?: number, limit?: number) => {
     set((state) => {
       state.marinasLoading = "loading";
     });
     try {
       const { marinaFilters, marinaPagination } = get();
 
-      // Calculate offset from page
-      const offset = (marinaPagination.page - 1) * marinaPagination.limit;
+      // Use provided offset/limit or calculate from pagination state
+      const actualOffset =
+        offset !== undefined
+          ? offset
+          : (marinaPagination.page - 1) * marinaPagination.limit;
+      const actualLimit = limit !== undefined ? limit : marinaPagination.limit;
 
       const params = new URLSearchParams({
-        offset: offset.toString(),
-        limit: marinaPagination.limit.toString(),
+        offset: actualOffset.toString(),
+        limit: actualLimit.toString(),
         ...(marinaFilters.search && { searchTerm: marinaFilters.search }),
         ...(marinaFilters.city && { city: marinaFilters.city }),
         ...(marinaFilters.state && { state: marinaFilters.state }),
@@ -248,6 +289,37 @@ export const createMarinaSlice: StateCreator<
         state.marinasLoading = "failed";
       });
       throw error;
+    }
+  },
+
+  fetchMarinaAvailability: async (marinaId: number) => {
+    set((state) => {
+      state.marinaAvailabilityLoading = "loading";
+    });
+    try {
+      const response = await axios.get(
+        `/api/marinas/availability?marinaId=${marinaId}`
+      );
+      const data = response.data;
+
+      set((state) => {
+        state.marinaAvailability = data.data || {
+          bookedDates: [],
+          blockedDates: [],
+          availableSlips: [],
+        };
+        state.marinaAvailabilityLoading = "succeeded";
+      });
+    } catch (error) {
+      set((state) => {
+        state.marinaAvailabilityLoading = "failed";
+        state.marinaAvailability = {
+          bookedDates: [],
+          blockedDates: [],
+          availableSlips: [],
+        };
+      });
+      console.error("Failed to fetch marina availability:", error);
     }
   },
 
