@@ -48,7 +48,7 @@ export default function MarinaCard({ marina }: MarinaCardProps) {
               </p>
             </div>
             {marina.price_per_day && marina.price_per_day > 0 && (
-              <div className="ml-4 text-right p-4 bg-gradient-to-br from-cyan-50 to-blue-50 rounded-2xl border-2 border-cyan-100">
+              <div className="ml-4 text-right p-4  from-cyan-50 to-blue-50 rounded-2xl ">
                 <div className="text-4xl font-bold bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
                   ${marina.price_per_day.toFixed(2)}
                 </div>
