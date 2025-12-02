@@ -7,9 +7,15 @@ import {
   createNotificationSlice,
   NotificationSlice,
 } from "./slices/notificationSlice";
+import { createBoatSlice, BoatSlice } from "./slices/boatSlice";
+import { createBookingSlice, BookingSlice } from "./slices/bookingSlice";
 
 // Combined Store Type
-export type Store = AuthSlice & MarinaSlice & NotificationSlice;
+export type Store = AuthSlice &
+  MarinaSlice &
+  NotificationSlice &
+  BoatSlice &
+  BookingSlice;
 
 // Create the combined store with proper typing
 export const useStore = create<Store>()(
@@ -19,6 +25,8 @@ export const useStore = create<Store>()(
         ...createAuthSlice(set as any, get as any, api as any),
         ...createMarinaSlice(set as any, get as any, api as any),
         ...createNotificationSlice(set as any, get as any, api as any),
+        ...createBoatSlice(set as any, get as any, api as any),
+        ...createBookingSlice(set as any, get as any, api as any),
       })),
       {
         name: "docknow-storage",
@@ -106,7 +114,6 @@ export const useMarinas = () => {
     setMarinaPage,
   };
 };
-
 export const useNotifications = () => {
   const notifications = useStore((state) => state.notifications);
   const unreadCount = useStore((state) => state.unreadCount);
@@ -134,5 +141,68 @@ export const useNotifications = () => {
     showError,
     showWarning,
     showInfo,
+  };
+};
+export const useBoats = () => {
+  const boats = useStore((state) => state.boats);
+  const boatsLoading = useStore((state) => state.boatsLoading);
+  const selectedBoat = useStore((state) => state.selectedBoat);
+  const boatTypes = useStore((state) => state.boatTypes);
+  const boatTypesLoading = useStore((state) => state.boatTypesLoading);
+  const fetchBoats = useStore((state) => state.fetchBoats);
+  const fetchBoatTypes = useStore((state) => state.fetchBoatTypes);
+  const createBoat = useStore((state) => state.createBoat);
+  const updateBoat = useStore((state) => state.updateBoat);
+  const deleteBoat = useStore((state) => state.deleteBoat);
+  const setSelectedBoat = useStore((state) => state.setSelectedBoat);
+
+  return {
+    boats,
+    boatsLoading,
+    selectedBoat,
+    boatTypes,
+    boatTypesLoading,
+    fetchBoats,
+    fetchBoatTypes,
+    createBoat,
+    updateBoat,
+    deleteBoat,
+    setSelectedBoat,
+  };
+};
+
+export const useBooking = () => {
+  const marinaData = useStore((state) => state.marinaData);
+  const checkIn = useStore((state) => state.checkIn);
+  const checkOut = useStore((state) => state.checkOut);
+  const specialRequests = useStore((state) => state.specialRequests);
+  const appliedCoupon = useStore((state) => state.appliedCoupon);
+  const pricing = useStore((state) => state.pricing);
+  const completedBookingId = useStore((state) => state.completedBookingId);
+  const setMarinaData = useStore((state) => state.setMarinaData);
+  const setCheckInOut = useStore((state) => state.setCheckInOut);
+  const setSpecialRequests = useStore((state) => state.setSpecialRequests);
+  const setAppliedCoupon = useStore((state) => state.setAppliedCoupon);
+  const setPricing = useStore((state) => state.setPricing);
+  const setCompletedBookingId = useStore(
+    (state) => state.setCompletedBookingId
+  );
+  const resetBooking = useStore((state) => state.resetBooking);
+
+  return {
+    marinaData,
+    checkIn,
+    checkOut,
+    specialRequests,
+    appliedCoupon,
+    pricing,
+    completedBookingId,
+    setMarinaData,
+    setCheckInOut,
+    setSpecialRequests,
+    setAppliedCoupon,
+    setPricing,
+    setCompletedBookingId,
+    resetBooking,
   };
 };

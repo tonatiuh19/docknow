@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
+    "@stripe/react-stripe-js": "^5.4.1",
+    "@stripe/stripe-js": "^8.5.3",
     "@types/jsonwebtoken": "^9.0.10",
     "@vercel/node": "^5.5.12",
     "axios": "^1.13.2",

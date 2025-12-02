@@ -21,6 +21,7 @@ import LoadingSpinner from "@/components/LoadingSpinner";
 import ImageCarousel from "@/components/marina/ImageCarousel";
 import DateAvailabilityCalendar from "@/components/marina/DateAvailabilityCalendar";
 import AmenityIcon from "@/components/marina/AmenityIcon";
+import AuthModal from "@/components/AuthModal";
 import dynamic from "next/dynamic";
 
 // Dynamically import MarinaMap to avoid SSR issues with Leaflet
@@ -118,11 +119,14 @@ export default function MarinaDetailPage() {
   const fetchMarinaAvailability = useStore(
     (state) => state.fetchMarinaAvailability
   );
+  const isAuthenticated = useStore((state) => state.isAuthenticated);
+  const user = useStore((state) => state.user);
 
   const [marina, setMarina] = useState<MarinaDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [checkIn, setCheckIn] = useState<string | null>(null);
   const [checkOut, setCheckOut] = useState<string | null>(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
   useEffect(() => {
     fetchMarinaDetails();
@@ -170,7 +174,16 @@ export default function MarinaDetailPage() {
       return;
     }
 
-    router.push(`/booking/${slug}?checkIn=${checkIn}&checkOut=${checkOut}`);
+    // Check if user is authenticated
+    if (!isAuthenticated) {
+      setShowAuthModal(true);
+      return;
+    }
+
+    // Redirect to checkout page with boat selection
+    router.push(
+      `/checkout?marinaSlug=${slug}&checkIn=${checkIn}&checkOut=${checkOut}`
+    );
   };
 
   if (loading) {
@@ -506,6 +519,12 @@ export default function MarinaDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Auth Modal */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+      />
     </div>
   );
 }

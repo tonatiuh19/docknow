@@ -59,20 +59,23 @@ export default function DateAvailabilityCalendar({
     return dateStr.split("T")[0];
   };
 
-  const isDateBooked = (date: Date): boolean => {
+  /**
+   * Count how many slips are booked on a specific date
+   */
+  const getBookedSlipsCount = (date: Date): number => {
     const dateStr = date.toISOString().split("T")[0];
-    return bookedDates.some((booking) => {
+    return bookedDates.filter((booking) => {
       const checkIn = new Date(normalizeDateString(booking.checkIn));
       const checkOut = new Date(normalizeDateString(booking.checkOut));
       return date >= checkIn && date <= checkOut;
-    });
+    }).length;
   };
 
   /**
    * Determines availability status for a specific date
    * A date is ONLY fully blocked if:
    * 1. There's a marina-wide block (slip_id = NULL), OR
-   * 2. ALL available slips are blocked for that date
+   * 2. ALL available slips are booked/blocked for that date
    */
   const getDateAvailability = (
     date: Date
@@ -81,6 +84,7 @@ export default function DateAvailabilityCalendar({
     hasPartialBlocking: boolean;
     availableSlipsCount: number;
     blockedSlipsCount: number;
+    bookedSlipsCount: number;
     blockedSlips: BlockedDate[];
     reason?: string;
   } => {
@@ -100,10 +104,14 @@ export default function DateAvailabilityCalendar({
         hasPartialBlocking: false,
         availableSlipsCount: 0,
         blockedSlipsCount: totalSlips || availableSlips.length,
+        bookedSlipsCount: 0,
         blockedSlips: dayBlocks,
         reason: marinaWideBlock.reason,
       };
     }
+
+    // Count booked slips for this date
+    const bookedSlipsCount = getBookedSlipsCount(date);
 
     // If no slips data available, check if there are any blocks
     if (availableSlips.length === 0) {
@@ -114,16 +122,21 @@ export default function DateAvailabilityCalendar({
           hasPartialBlocking: false,
           availableSlipsCount: 0,
           blockedSlipsCount: dayBlocks.length,
+          bookedSlipsCount: 0,
           blockedSlips: dayBlocks,
           reason: dayBlocks[0]?.reason || "Unavailable",
         };
       }
-      // No blocks and no slip data - assume available
+      // No blocks and no slip data - check bookings
+      const totalSlipsCount = totalSlips || 0;
       return {
-        isFullyBlocked: false,
-        hasPartialBlocking: false,
-        availableSlipsCount: totalSlips || 0,
+        isFullyBlocked:
+          bookedSlipsCount >= totalSlipsCount && totalSlipsCount > 0,
+        hasPartialBlocking:
+          bookedSlipsCount > 0 && bookedSlipsCount < totalSlipsCount,
+        availableSlipsCount: Math.max(0, totalSlipsCount - bookedSlipsCount),
         blockedSlipsCount: 0,
+        bookedSlipsCount,
         blockedSlips: [],
       };
     }
@@ -133,21 +146,27 @@ export default function DateAvailabilityCalendar({
       dayBlocks.filter((b) => b.slipId !== null).map((b) => b.slipId)
     );
 
-    const availableSlipsCount = availableSlips.filter(
-      (s) => !blockedSlipIds.has(s.id)
-    ).length;
-
     const blockedSlipsCount = blockedSlipIds.size;
+    const totalUnavailable = bookedSlipsCount + blockedSlipsCount;
+    const availableSlipsCount = Math.max(
+      0,
+      availableSlips.length - totalUnavailable
+    );
 
     return {
-      isFullyBlocked: availableSlipsCount === 0 && blockedSlipsCount > 0,
-      hasPartialBlocking: blockedSlipsCount > 0 && availableSlipsCount > 0,
+      isFullyBlocked:
+        availableSlipsCount === 0 &&
+        (bookedSlipsCount > 0 || blockedSlipsCount > 0),
+      hasPartialBlocking:
+        (blockedSlipsCount > 0 || bookedSlipsCount > 0) &&
+        availableSlipsCount > 0,
       availableSlipsCount,
       blockedSlipsCount,
+      bookedSlipsCount,
       blockedSlips: dayBlocks,
       reason:
-        availableSlipsCount === 0 && blockedSlipsCount > 0
-          ? dayBlocks[0]?.reason || "All slips blocked"
+        availableSlipsCount === 0 && totalUnavailable > 0
+          ? dayBlocks[0]?.reason || "All slips unavailable"
           : undefined,
     };
   };
@@ -159,9 +178,9 @@ export default function DateAvailabilityCalendar({
       if (date < min) return true;
     }
 
-    // Date is disabled ONLY if it's fully blocked (all slips unavailable) or booked
+    // Date is disabled ONLY if ALL slips are unavailable (booked or blocked)
     const availability = getDateAvailability(date);
-    return isDateBooked(date) || availability.isFullyBlocked;
+    return availability.isFullyBlocked;
   };
 
   const isDateInRange = (date: Date): boolean => {
@@ -326,7 +345,7 @@ export default function DateAvailabilityCalendar({
             </div>
             <div className="flex items-center gap-1">
               <div className="w-4 h-4 bg-gray-100 rounded line-through"></div>
-              <span className="text-gray-600">Fully Blocked</span>
+              <span className="text-gray-600">All Slips Unavailable</span>
             </div>
             <div className="flex items-center gap-1">
               <div className="w-4 h-4 bg-white border border-gray-300 rounded relative">
@@ -335,6 +354,12 @@ export default function DateAvailabilityCalendar({
                 </div>
               </div>
               <span className="text-gray-600">Partial (# slips available)</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-4 h-4 bg-white border border-gray-300 rounded relative">
+                <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-blue-500 rounded-full"></div>
+              </div>
+              <span className="text-gray-600">Has bookings</span>
             </div>
           </div>
         )}
@@ -355,7 +380,6 @@ export default function DateAvailabilityCalendar({
         {days.map((date, index) => {
           const dateStr = date.toISOString().split("T")[0];
           const availability = getDateAvailability(date);
-          const booked = isDateBooked(date);
           const disabled = isDateDisabled(date);
 
           return (
@@ -371,12 +395,13 @@ export default function DateAvailabilityCalendar({
             >
               {date.getDate()}
 
-              {/* Booked indicator */}
-              {booked && (
-                <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-red-500 rounded-full"></div>
-              )}
+              {/* Booked indicator - show if there are bookings but not fully blocked */}
+              {availability.bookedSlipsCount > 0 &&
+                !availability.isFullyBlocked && (
+                  <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-blue-500 rounded-full"></div>
+                )}
 
-              {/* Available slips count badge (only show if partially blocked and in current month) */}
+              {/* Available slips count badge (only show if partially booked/blocked and in current month) */}
               {availability.hasPartialBlocking && isCurrentMonth(date) && (
                 <div className="absolute -top-1 -right-1 bg-green-600 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-semibold">
                   {availability.availableSlipsCount}
@@ -385,35 +410,58 @@ export default function DateAvailabilityCalendar({
 
               {/* Tooltip on hover showing availability details */}
               {(availability.hasPartialBlocking ||
-                availability.isFullyBlocked) && (
-                <div className="invisible group-hover:visible absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-10 pointer-events-none">
-                  {availability.isFullyBlocked ? (
-                    <div>
-                      <div className="font-semibold text-red-300">
-                        Fully Blocked
+                availability.isFullyBlocked) &&
+                isCurrentMonth(date) && (
+                  <div className="invisible group-hover:visible absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-10 pointer-events-none">
+                    {availability.isFullyBlocked ? (
+                      <div>
+                        <div className="font-semibold text-red-300">
+                          Fully Blocked
+                        </div>
+                        <div className="text-[10px] text-gray-300">
+                          {availability.reason || "All slips unavailable"}
+                        </div>
+                        {availability.bookedSlipsCount > 0 && (
+                          <div className="text-[10px] text-gray-300 mt-1">
+                            Booked: {availability.bookedSlipsCount} slips
+                          </div>
+                        )}
+                        {availability.blockedSlipsCount > 0 && (
+                          <div className="text-[10px] text-gray-300">
+                            Blocked: {availability.blockedSlipsCount} slips
+                          </div>
+                        )}
                       </div>
-                      <div className="text-[10px] text-gray-300">
-                        {availability.reason || "Marina unavailable"}
+                    ) : (
+                      <div>
+                        <div className="font-semibold text-green-300">
+                          {availability.availableSlipsCount} of{" "}
+                          {availableSlips.length ||
+                            totalSlips ||
+                            availability.availableSlipsCount +
+                              availability.bookedSlipsCount +
+                              availability.blockedSlipsCount}{" "}
+                          slips available
+                        </div>
+                        {availability.bookedSlipsCount > 0 && (
+                          <div className="text-[10px] text-gray-300 mt-1">
+                            Booked: {availability.bookedSlipsCount} slips
+                          </div>
+                        )}
+                        {availability.blockedSlipsCount > 0 && (
+                          <div className="text-[10px] text-gray-300">
+                            Blocked:{" "}
+                            {availability.blockedSlips
+                              .map((b) => b.slipNumber)
+                              .filter(Boolean)
+                              .join(", ") ||
+                              `${availability.blockedSlipsCount} slips`}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ) : (
-                    <div>
-                      <div className="font-semibold text-green-300">
-                        {availability.availableSlipsCount} of{" "}
-                        {availableSlips.length} slips available
-                      </div>
-                      <div className="text-[10px] text-gray-300 mt-1">
-                        Blocked slips:{" "}
-                        {availability.blockedSlips
-                          .map((b) => b.slipNumber)
-                          .filter(Boolean)
-                          .join(", ") ||
-                          `${availability.blockedSlipsCount} slips`}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
+                    )}
+                  </div>
+                )}
             </div>
           );
         })}
