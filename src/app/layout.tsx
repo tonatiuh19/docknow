@@ -11,6 +11,11 @@ export const metadata: Metadata = {
   keywords:
     "marina, dock, boat slip, yacht berth, boat docking, marina reservation",
   authors: [{ name: "DockNow" }],
+  icons: {
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+    apple: "/apple-icon.png",
+  },
   openGraph: {
     title: "DockNow - Find & Book Marina Slips Worldwide",
     description: "Discover and book marina slips worldwide",
@@ -27,6 +32,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="scroll-smooth">
+      <head>
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+        />
+      </head>
       <body className={inter.className}>{children}</body>
     </html>
   );
