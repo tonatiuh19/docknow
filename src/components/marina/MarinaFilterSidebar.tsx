@@ -86,15 +86,17 @@ export default function MarinaFilterSidebar({
   };
 
   return (
-    <div className="backdrop-blur-xl bg-white/70 border border-gray-200/50 rounded-3xl shadow-xl h-full flex flex-col overflow-hidden">
-      <div className="flex items-center justify-between p-6 border-b border-gray-200/50 flex-shrink-0 bg-gradient-to-b from-white/50 to-transparent">
-        <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-          <FaFilter className="text-ocean-600" />
+    <div className="backdrop-blur-xl bg-white/90 border border-slate-200/80 rounded-3xl shadow-2xl h-full flex flex-col overflow-hidden hover:shadow-cyan-500/10 transition-all duration-300">
+      <div className="flex items-center justify-between p-6 border-b-2 border-slate-100 flex-shrink-0 bg-gradient-to-b from-white/90 to-transparent">
+        <h2 className="text-2xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent flex items-center gap-3">
+          <div className="p-2 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl">
+            <FaFilter className="text-white w-5 h-5" />
+          </div>
           Filters
         </h2>
         <button
           onClick={onClearFilters}
-          className="text-sm text-ocean-600 hover:text-ocean-700 font-medium transition-colors"
+          className="text-sm text-cyan-600 hover:text-cyan-700 font-bold transition-colors px-4 py-2 rounded-xl hover:bg-cyan-50"
         >
           Clear all
         </button>

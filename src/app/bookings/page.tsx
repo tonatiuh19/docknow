@@ -37,6 +37,7 @@ export default function MyBookingsPage() {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
 
   useEffect(() => {
     // Check authentication
@@ -155,77 +156,150 @@ export default function MyBookingsPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-br from-gray-50 via-blue-50/30 to-gray-50">
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 via-cyan-50/20 to-slate-50">
       <Header />
 
-      <div className="flex-1 pt-24 pb-12">
-        <div className="container mx-auto px-4 max-w-7xl">
-          {/* Page Header */}
-          <div className="mb-8">
-            <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-3 flex items-center gap-3">
-              <FiPackage className="text-ocean-600" />
-              My Bookings
-            </h1>
-            <p className="text-gray-600 text-lg">
-              Manage and track your marina reservations
-            </p>
-          </div>
+      {/* Professional Gradient Header Section - Similar to Admin Ports */}
+      <div className="relative bg-gradient-to-r from-slate-900 via-cyan-900 to-blue-900 py-16 mt-20 mb-10">
+        <div className="absolute inset-0 bg-gradient-to-t from-transparent to-white/5 overflow-hidden"></div>
+        <div className="absolute inset-0 backdrop-blur-3xl bg-gradient-to-br from-slate-900/80 via-cyan-900/80 to-blue-900/80 overflow-hidden"></div>
 
-          {/* Filters */}
-          <div className="mb-8 backdrop-blur-xl bg-white/70 border border-gray-200/50 rounded-2xl shadow-lg p-4">
-            <div className="flex items-center gap-3 flex-wrap">
-              <div className="flex items-center gap-2 text-gray-700 font-medium">
-                <FiFilter className="w-5 h-5" />
-                <span>Filter by:</span>
+        {/* Animated background elements */}
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl animate-pulse overflow-hidden"></div>
+        <div
+          className="absolute bottom-0 right-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl animate-pulse overflow-hidden"
+          style={{ animationDelay: "1s" }}
+        ></div>
+
+        <div className="container mx-auto px-4 max-w-7xl relative z-10">
+          <div className="flex items-center justify-between flex-wrap gap-6 mb-6">
+            <div>
+              <h1 className="text-4xl md:text-5xl font-bold text-white mb-3 flex items-center gap-4">
+                <div className="p-3 bg-cyan-500/20 rounded-2xl backdrop-blur-xl border border-cyan-400/30">
+                  <FiPackage className="text-cyan-400 w-10 h-10" />
+                </div>
+                My Bookings
+              </h1>
+              <p className="text-cyan-100 text-lg ml-1">
+                Manage and track your marina reservations
+              </p>
+            </div>
+            <div className="text-right">
+              <div className="text-3xl font-bold text-white mb-1">
+                {bookings.length}
               </div>
-              {statusFilters.map((filter) => (
-                <button
-                  key={filter.value}
-                  onClick={() => setSelectedStatus(filter.value as any)}
-                  className={`relative px-5 py-2.5 rounded-xl font-semibold transition-all duration-200 overflow-hidden group ${
-                    selectedStatus === filter.value
-                      ? "text-white shadow-lg scale-105"
-                      : "text-gray-700 hover:text-ocean-600 hover:scale-105"
-                  }`}
-                >
-                  {selectedStatus === filter.value && (
-                    <>
-                      <div className="absolute inset-0 bg-gradient-to-br from-ocean-500 to-ocean-600"></div>
-                      <div className="absolute inset-0 bg-gradient-to-t from-transparent to-white/20"></div>
-                    </>
-                  )}
-                  <span className="relative z-10">{filter.label}</span>
-                </button>
-              ))}
+              <div className="text-sm text-cyan-200 mb-4">
+                Total Reservations
+              </div>
             </div>
           </div>
 
+          {/* Filter Dropdown in Hero Section */}
+          <div className="flex justify-end relative z-[100]">
+            <div className="relative inline-block">
+              <button
+                onClick={() => setShowFilterDropdown(!showFilterDropdown)}
+                className="flex items-center gap-3 px-6 py-3 rounded-2xl backdrop-blur-xl bg-white/10 border-2 border-white/20 shadow-xl hover:bg-white/20 transition-all duration-300 hover:-translate-y-0.5 group"
+              >
+                <div className="p-2 bg-white/10 rounded-xl group-hover:scale-110 transition-transform backdrop-blur-xl">
+                  <FiFilter className="w-5 h-5 text-white" />
+                </div>
+                <span className="font-bold text-white text-base">
+                  Filter by Status:
+                </span>
+                <span className="font-bold text-cyan-300 text-base">
+                  {statusFilters.find((f) => f.value === selectedStatus)?.label}
+                </span>
+                <svg
+                  className={`w-5 h-5 text-white transition-transform duration-300 ${
+                    showFilterDropdown ? "rotate-180" : ""
+                  }`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2.5}
+                    d="M19 9l-7 7-7-7"
+                  />
+                </svg>
+              </button>
+
+              {/* Dropdown Menu */}
+              {showFilterDropdown && (
+                <>
+                  <div
+                    className="fixed inset-0 z-[9998]"
+                    onClick={() => setShowFilterDropdown(false)}
+                  />
+                  <div className="absolute top-full mt-2 right-0 w-64 backdrop-blur-xl bg-white/95 border-2 border-slate-200/80 rounded-2xl shadow-2xl overflow-hidden z-[9999]">
+                    {statusFilters.map((filter) => (
+                      <button
+                        key={filter.value}
+                        onClick={() => {
+                          setSelectedStatus(filter.value as any);
+                          setShowFilterDropdown(false);
+                        }}
+                        className={`w-full flex items-center gap-3 px-5 py-4 transition-all duration-200 ${
+                          selectedStatus === filter.value
+                            ? "bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold"
+                            : "text-slate-700 hover:bg-cyan-50 font-semibold"
+                        }`}
+                      >
+                        {selectedStatus === filter.value && (
+                          <FiCheckCircle className="w-5 h-5" />
+                        )}
+                        <span
+                          className={
+                            selectedStatus === filter.value ? "" : "ml-8"
+                          }
+                        >
+                          {filter.label}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 pb-12">
+        <div className="container mx-auto px-4 max-w-7xl">
           {/* Bookings Grid */}
           {bookings.length === 0 ? (
-            <div className="backdrop-blur-xl bg-white/70 border border-gray-200/50 rounded-3xl shadow-xl p-16 text-center">
-              <div className="text-7xl mb-6">
-                <FiAnchor className="inline text-gray-300" />
+            <div className="backdrop-blur-xl bg-white/90 border border-slate-200/80 rounded-3xl shadow-2xl p-20 text-center hover:shadow-cyan-500/10 transition-all duration-300">
+              <div className="relative inline-block">
+                <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/20 to-blue-600/20 rounded-full blur-3xl"></div>
+                <div className="relative p-8 bg-gradient-to-br from-slate-100 to-cyan-50 rounded-full">
+                  <FiAnchor className="inline text-slate-400 w-24 h-24" />
+                </div>
               </div>
-              <h3 className="text-3xl font-bold text-gray-900 mb-3">
+              <h3 className="text-3xl font-bold text-slate-900 mb-3 mt-8">
                 No bookings found
               </h3>
-              <p className="text-gray-600 text-lg mb-8">
+              <p className="text-slate-600 text-lg mb-10 max-w-md mx-auto">
                 {selectedStatus === "all"
                   ? "You haven't made any reservations yet. Start exploring marinas!"
                   : `You don't have any ${selectedStatus} bookings.`}
               </p>
               <Link
                 href="/marinas"
-                className="relative inline-flex items-center gap-2 px-8 py-4 rounded-full font-semibold text-white overflow-hidden group hover:scale-105 transition-transform"
+                className="relative inline-flex items-center gap-3 px-10 py-5 rounded-2xl font-semibold text-white overflow-hidden group hover:scale-105 transition-all duration-300 shadow-xl shadow-cyan-500/30"
               >
-                <div className="absolute inset-0 bg-gradient-to-br from-ocean-500 to-ocean-600"></div>
+                <div className="absolute inset-0 bg-gradient-to-br from-cyan-500 via-cyan-600 to-blue-600"></div>
                 <div className="absolute inset-0 bg-gradient-to-t from-transparent to-white/20"></div>
-                <span className="relative z-10">Browse Marinas</span>
-                <FiChevronRight className="relative z-10" />
+                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 bg-white/10 transition-opacity"></div>
+                <span className="relative z-10 text-lg">Browse Marinas</span>
+                <FiChevronRight className="relative z-10 w-5 h-5" />
               </Link>
             </div>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {bookings.map((booking) => {
                 const checkIn = new Date(booking.checkInDate);
                 const checkOut = new Date(booking.checkOutDate);
@@ -235,27 +309,33 @@ export default function MyBookingsPage() {
                 return (
                   <div
                     key={booking.id}
-                    className="backdrop-blur-xl bg-white/70 border border-gray-200/50 rounded-2xl shadow-lg hover:shadow-2xl transition-all overflow-hidden group"
+                    className="backdrop-blur-xl bg-white/90 border border-slate-200/80 rounded-3xl shadow-xl hover:shadow-2xl hover:shadow-cyan-500/20 transition-all duration-300 overflow-hidden group hover:-translate-y-1"
                   >
-                    {/* Header */}
-                    <div className="relative bg-gradient-to-r from-ocean-600 to-sky-500 p-6 text-white overflow-hidden">
-                      <div className="absolute inset-0 bg-gradient-to-t from-transparent to-white/10"></div>
+                    {/* Professional Header with Gradient - Similar to Admin Ports */}
+                    <div className="relative bg-gradient-to-r from-slate-900 via-cyan-900 to-blue-900 p-8 text-white overflow-hidden">
+                      <div className="absolute inset-0 bg-gradient-to-t from-transparent to-white/5"></div>
+                      <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl"></div>
                       <div className="relative z-10">
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex items-center gap-2">
-                            {getStatusIcon(booking.status)}
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-white/10 rounded-lg backdrop-blur-xl border border-white/20">
+                              {getStatusIcon(booking.status)}
+                            </div>
                             <span className={getStatusBadge(booking.status)}>
                               {booking.status}
                             </span>
                           </div>
-                          <span className="text-sm opacity-90">
-                            #{booking.id}
-                          </span>
+                          <div className="text-right">
+                            <div className="text-sm opacity-90 mb-1">
+                              Booking ID
+                            </div>
+                            <div className="font-semibold">#{booking.id}</div>
+                          </div>
                         </div>
-                        <h3 className="text-2xl font-bold mb-1">
+                        <h3 className="text-2xl font-bold mb-2">
                           {booking.marina.name}
                         </h3>
-                        <div className="flex items-center gap-2 text-sm opacity-90">
+                        <div className="flex items-center gap-2 text-sm text-cyan-100">
                           <FiMapPin className="w-4 h-4" />
                           <span>
                             {booking.marina.city}, {booking.marina.state}
@@ -265,24 +345,33 @@ export default function MyBookingsPage() {
                     </div>
 
                     {/* Content */}
-                    <div className="p-6 space-y-4">
+                    <div className="p-8 space-y-6">
                       {/* Dates */}
-                      <div className="flex items-start gap-3">
-                        <FiCalendar className="w-5 h-5 text-ocean-600 mt-0.5" />
+                      <div className="flex items-start gap-4 p-5 bg-gradient-to-br from-slate-50 to-cyan-50/30 rounded-2xl border border-slate-100">
+                        <div className="p-3 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl">
+                          <FiCalendar className="w-6 h-6 text-white" />
+                        </div>
                         <div className="flex-1">
-                          <div className="text-sm text-gray-600 mb-1">
-                            Check-in
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <div className="text-xs text-slate-500 font-semibold uppercase tracking-wide mb-2">
+                                Check-in
+                              </div>
+                              <div className="font-bold text-slate-900 text-lg">
+                                {format(checkIn, "MMM d, yyyy")}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-slate-500 font-semibold uppercase tracking-wide mb-2">
+                                Check-out
+                              </div>
+                              <div className="font-bold text-slate-900 text-lg">
+                                {format(checkOut, "MMM d, yyyy")}
+                              </div>
+                            </div>
                           </div>
-                          <div className="font-semibold text-gray-900">
-                            {format(checkIn, "MMM d, yyyy")}
-                          </div>
-                          <div className="text-sm text-gray-600 mt-2 mb-1">
-                            Check-out
-                          </div>
-                          <div className="font-semibold text-gray-900">
-                            {format(checkOut, "MMM d, yyyy")}
-                          </div>
-                          <div className="text-xs text-gray-500 mt-1">
+                          <div className="text-xs text-slate-500 mt-3 flex items-center gap-2">
+                            <FiClock className="w-3 h-3" />
                             {booking.totalDays}{" "}
                             {booking.totalDays === 1 ? "night" : "nights"}
                           </div>
@@ -290,34 +379,37 @@ export default function MyBookingsPage() {
                       </div>
 
                       {/* Boat & Slip */}
-                      <div className="flex items-start gap-3">
-                        <FiAnchor className="w-5 h-5 text-ocean-600 mt-0.5" />
+                      <div className="flex items-start gap-4 p-5 bg-gradient-to-br from-slate-50 to-blue-50/30 rounded-2xl border border-slate-100">
+                        <div className="p-3 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-xl">
+                          <FiAnchor className="w-6 h-6 text-white" />
+                        </div>
                         <div className="flex-1">
-                          <div className="text-sm text-gray-600">Boat</div>
-                          <div className="font-semibold text-gray-900">
+                          <div className="text-xs text-slate-500 font-semibold uppercase tracking-wide mb-2">
+                            Vessel Information
+                          </div>
+                          <div className="font-bold text-slate-900 text-lg mb-3">
                             {booking.boat.name}
                           </div>
                           {booking.slip && (
-                            <>
-                              <div className="text-sm text-gray-600 mt-2">
-                                Slip
-                              </div>
-                              <div className="font-semibold text-gray-900">
-                                {booking.slip.number}
-                              </div>
-                            </>
+                            <div className="flex items-center gap-2 text-sm text-slate-600">
+                              <span className="px-3 py-1 bg-white rounded-lg font-medium border border-slate-200">
+                                Slip {booking.slip.number}
+                              </span>
+                            </div>
                           )}
                         </div>
                       </div>
 
                       {/* Price */}
-                      <div className="flex items-start gap-3 pt-4 border-t border-gray-100">
-                        <FiDollarSign className="w-5 h-5 text-ocean-600 mt-0.5" />
+                      <div className="flex items-center gap-4 pt-6 border-t-2 border-slate-100">
+                        <div className="p-3 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl">
+                          <FiDollarSign className="w-6 h-6 text-white" />
+                        </div>
                         <div className="flex-1">
-                          <div className="text-sm text-gray-600">
+                          <div className="text-xs text-slate-500 font-semibold uppercase tracking-wide mb-1">
                             Total Amount
                           </div>
-                          <div className="text-2xl font-bold text-ocean-600">
+                          <div className="text-3xl font-bold bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
                             ${booking.totalAmount.toFixed(2)}
                           </div>
                         </div>
@@ -392,27 +484,29 @@ export default function MyBookingsPage() {
                     </div>
 
                     {/* Actions */}
-                    <div className="p-6 pt-0 flex gap-3">
+                    <div className="p-8 pt-0 flex gap-4">
                       <Link
                         href={`/marinas/${booking.marina.slug}`}
-                        className="flex-1 relative px-4 py-3 rounded-xl font-semibold transition-all overflow-hidden group hover:scale-105 text-center flex items-center justify-center gap-2"
+                        className="flex-1 relative px-6 py-4 rounded-2xl font-semibold transition-all overflow-hidden group hover:scale-105 text-center flex items-center justify-center gap-2 shadow-lg"
                       >
-                        <div className="absolute inset-0 bg-gradient-to-br from-gray-100 to-gray-200"></div>
-                        <span className="relative z-10 text-gray-700">
+                        <div className="absolute inset-0 bg-gradient-to-br from-slate-100 to-slate-200"></div>
+                        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 bg-gradient-to-br from-slate-200 to-slate-300 transition-opacity"></div>
+                        <span className="relative z-10 text-slate-700 font-bold">
                           View Marina
                         </span>
-                        <FiChevronRight className="relative z-10 w-4 h-4 text-gray-700" />
+                        <FiChevronRight className="relative z-10 w-5 h-5 text-slate-700" />
                       </Link>
                       {canCancel &&
                         !getCancellationRequestForBooking(booking.id) && (
                           <button
                             onClick={() => handleCancelClick(booking.id)}
-                            className="relative px-4 py-3 rounded-xl font-semibold transition-all overflow-hidden group hover:scale-105 flex items-center justify-center gap-2"
+                            className="relative px-6 py-4 rounded-2xl font-semibold transition-all overflow-hidden group hover:scale-105 flex items-center justify-center gap-2 shadow-lg shadow-orange-500/30"
                           >
-                            <div className="absolute inset-0 bg-gradient-to-br from-orange-500 to-orange-600"></div>
+                            <div className="absolute inset-0 bg-gradient-to-br from-orange-500 to-red-600"></div>
                             <div className="absolute inset-0 bg-gradient-to-t from-transparent to-white/20"></div>
-                            <FiAlertCircle className="relative z-10 w-4 h-4 text-white" />
-                            <span className="relative z-10 text-white">
+                            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 bg-white/10 transition-opacity"></div>
+                            <FiAlertCircle className="relative z-10 w-5 h-5 text-white" />
+                            <span className="relative z-10 text-white font-bold">
                               Request Cancel
                             </span>
                           </button>
