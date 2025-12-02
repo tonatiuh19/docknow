@@ -9,13 +9,18 @@ import {
 } from "./slices/notificationSlice";
 import { createBoatSlice, BoatSlice } from "./slices/boatSlice";
 import { createBookingSlice, BookingSlice } from "./slices/bookingSlice";
+import {
+  createMyBookingsSlice,
+  MyBookingsSlice,
+} from "./slices/myBookingsSlice";
 
 // Combined Store Type
 export type Store = AuthSlice &
   MarinaSlice &
   NotificationSlice &
   BoatSlice &
-  BookingSlice;
+  BookingSlice &
+  MyBookingsSlice;
 
 // Create the combined store with proper typing
 export const useStore = create<Store>()(
@@ -27,6 +32,7 @@ export const useStore = create<Store>()(
         ...createNotificationSlice(set as any, get as any, api as any),
         ...createBoatSlice(set as any, get as any, api as any),
         ...createBookingSlice(set as any, get as any, api as any),
+        ...createMyBookingsSlice(set as any, get as any, api as any),
       })),
       {
         name: "docknow-storage",
