@@ -88,7 +88,7 @@ export default function UserPanel({
     {
       icon: FaCog,
       label: "Settings",
-      href: "/settings",
+      href: "/profile",
       color: "from-purple-500 to-pink-500",
       description: "Preferences & notifications",
     },
