@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { devtools, persist } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
 import { createAuthSlice, AuthSlice } from "./slices/authSlice";
+import { createHostAuthSlice, HostAuthSlice } from "./slices/hostAuthSlice";
 import { createMarinaSlice, MarinaSlice } from "./slices/marinaSlice";
 import {
   createNotificationSlice,
@@ -17,6 +18,7 @@ import { createProfileSlice, ProfileSlice } from "./slices/profileSlice";
 
 // Combined Store Type
 export type Store = AuthSlice &
+  HostAuthSlice &
   MarinaSlice &
   NotificationSlice &
   BoatSlice &
@@ -30,6 +32,7 @@ export const useStore = create<Store>()(
     persist(
       immer((set, get, api) => ({
         ...createAuthSlice(set as any, get as any, api as any),
+        ...createHostAuthSlice(set as any, get as any, api as any),
         ...createMarinaSlice(set as any, get as any, api as any),
         ...createNotificationSlice(set as any, get as any, api as any),
         ...createBoatSlice(set as any, get as any, api as any),
@@ -44,6 +47,9 @@ export const useStore = create<Store>()(
           user: state.user,
           token: state.token,
           isAuthenticated: state.isAuthenticated,
+          host: state.host,
+          hostToken: state.hostToken,
+          hostIsAuthenticated: state.hostIsAuthenticated,
         }),
       }
     ),
@@ -152,6 +158,29 @@ export const useNotifications = () => {
     showInfo,
   };
 };
+
+export const useHostAuth = () => {
+  const host = useStore((state) => state.host);
+  const hostToken = useStore((state) => state.hostToken);
+  const hostIsAuthenticated = useStore((state) => state.hostIsAuthenticated);
+  const hostAuthLoading = useStore((state) => state.hostAuthLoading);
+  const hostLogin = useStore((state) => state.hostLogin);
+  const hostLogout = useStore((state) => state.hostLogout);
+  const checkHostAuth = useStore((state) => state.checkHostAuth);
+  const sendHostCode = useStore((state) => state.sendHostCode);
+
+  return {
+    host,
+    hostToken,
+    hostIsAuthenticated,
+    hostAuthLoading,
+    hostLogin,
+    hostLogout,
+    checkHostAuth,
+    sendHostCode,
+  };
+};
+
 export const useBoats = () => {
   const boats = useStore((state) => state.boats);
   const boatsLoading = useStore((state) => state.boatsLoading);

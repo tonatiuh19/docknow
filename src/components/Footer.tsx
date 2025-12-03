@@ -90,7 +90,7 @@ export default function Footer() {
               </li>
               <li>
                 <Link
-                  href="/admin/login"
+                  href="/host/dashboard"
                   className="hover:text-white transition-colors"
                 >
                   Marina Dashboard
