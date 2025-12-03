@@ -173,7 +173,7 @@ async function sendHostVerificationEmail(
           
           <div class="footer">
             <p>© ${new Date().getFullYear()} DockNow. All rights reserved.</p>
-            <p>Need help? <a href="mailto:support@docknow.com">Contact Support</a></p>
+            <p>Need help? <a href="mailto:support@docknow.app">Contact Support</a></p>
           </div>
         </div>
       </body>
@@ -182,7 +182,7 @@ async function sendHostVerificationEmail(
 
     const mailOptions = {
       from:
-        process.env.SMTP_FROM || '"DockNow Host Portal" <noreply@docknow.com>',
+        process.env.SMTP_FROM || '"DockNow Host Portal" <noreply@docknow.app>',
       to: email,
       subject: `Your DockNow Host Portal Verification Code: ${code}`,
       html: emailBody,

@@ -1,5 +1,6 @@
 "use client";
 
+import MetaHelmet from "@/components/MetaHelmet";
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
@@ -265,5 +266,6 @@ export default function MarinasPage() {
         </div>
       </div>
     </div>
+    </>
   );
 }

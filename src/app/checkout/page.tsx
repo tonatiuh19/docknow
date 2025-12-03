@@ -1,5 +1,6 @@
 "use client";
 
+import MetaHelmet from "@/components/MetaHelmet";
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useStore } from "@/store/store";
@@ -118,9 +119,17 @@ function CheckoutContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <LoadingSpinner size="xl" message="Loading checkout..." />
-      </div>
+      <>
+        <MetaHelmet
+          title="Checkout | DockNow"
+          description="Complete your marina slip booking"
+          noindex={true}
+          nofollow={true}
+        />
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <LoadingSpinner size="xl" message="Loading checkout..." />
+        </div>
+      </>
     );
   }
 
@@ -129,83 +138,94 @@ function CheckoutContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-6xl mx-auto px-4">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Complete Your Booking
-          </h1>
-          <p className="text-gray-600">
-            {marinaData.name} • {checkIn} to {checkOut}
-          </p>
-        </div>
+    <>
+      <MetaHelmet
+        title="Checkout | DockNow"
+        description="Complete your marina slip booking"
+        noindex={true}
+        nofollow={true}
+      />
+      <div className="min-h-screen bg-gray-50 py-8">
+        <div className="max-w-6xl mx-auto px-4">
+          {/* Header */}
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+              Complete Your Booking
+            </h1>
+            <p className="text-gray-600">
+              {marinaData.name} • {checkIn} to {checkOut}
+            </p>
+          </div>
 
-        {/* Progress Steps */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
-            {steps.map((step, index) => {
-              const currentIndex = getCurrentStepIndex();
-              const isCompleted = index < currentIndex;
-              const isCurrent = index === currentIndex;
+          {/* Progress Steps */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between">
+              {steps.map((step, index) => {
+                const currentIndex = getCurrentStepIndex();
+                const isCompleted = index < currentIndex;
+                const isCurrent = index === currentIndex;
 
-              return (
-                <div key={step.id} className="flex items-center flex-1">
-                  <div className="flex flex-col items-center flex-1">
-                    <div
-                      className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
-                        isCompleted
-                          ? "bg-green-500 text-white"
-                          : isCurrent
-                          ? "bg-ocean-600 text-white"
-                          : "bg-gray-200 text-gray-500"
-                      }`}
-                    >
-                      {isCompleted ? (
-                        <FiCheck className="w-6 h-6" />
-                      ) : (
-                        step.icon
-                      )}
+                return (
+                  <div key={step.id} className="flex items-center flex-1">
+                    <div className="flex flex-col items-center flex-1">
+                      <div
+                        className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
+                          isCompleted
+                            ? "bg-green-500 text-white"
+                            : isCurrent
+                            ? "bg-ocean-600 text-white"
+                            : "bg-gray-200 text-gray-500"
+                        }`}
+                      >
+                        {isCompleted ? (
+                          <FiCheck className="w-6 h-6" />
+                        ) : (
+                          step.icon
+                        )}
+                      </div>
+                      <span
+                        className={`mt-2 text-sm font-medium ${
+                          isCurrent ? "text-ocean-600" : "text-gray-600"
+                        }`}
+                      >
+                        {step.label}
+                      </span>
                     </div>
-                    <span
-                      className={`mt-2 text-sm font-medium ${
-                        isCurrent ? "text-ocean-600" : "text-gray-600"
-                      }`}
-                    >
-                      {step.label}
-                    </span>
+                    {index < steps.length - 1 && (
+                      <div
+                        className={`h-1 flex-1 mx-4 mb-6 ${
+                          isCompleted ? "bg-green-500" : "bg-gray-200"
+                        }`}
+                      />
+                    )}
                   </div>
-                  {index < steps.length - 1 && (
-                    <div
-                      className={`h-1 flex-1 mx-4 mb-6 ${
-                        isCompleted ? "bg-green-500" : "bg-gray-200"
-                      }`}
-                    />
-                  )}
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Step Content */}
+          <div className="bg-white rounded-xl shadow-lg p-8">
+            {currentStep === "boat" && (
+              <BoatSelectionStep onNext={handleNextStep} />
+            )}
+            {currentStep === "details" && (
+              <BookingDetailsStep
+                onNext={handleNextStep}
+                onBack={handlePreviousStep}
+              />
+            )}
+            {currentStep === "payment" && (
+              <PaymentStep
+                onNext={handleNextStep}
+                onBack={handlePreviousStep}
+              />
+            )}
+            {currentStep === "confirmation" && <ConfirmationStep />}
           </div>
         </div>
-
-        {/* Step Content */}
-        <div className="bg-white rounded-xl shadow-lg p-8">
-          {currentStep === "boat" && (
-            <BoatSelectionStep onNext={handleNextStep} />
-          )}
-          {currentStep === "details" && (
-            <BookingDetailsStep
-              onNext={handleNextStep}
-              onBack={handlePreviousStep}
-            />
-          )}
-          {currentStep === "payment" && (
-            <PaymentStep onNext={handleNextStep} onBack={handlePreviousStep} />
-          )}
-          {currentStep === "confirmation" && <ConfirmationStep />}
-        </div>
       </div>
-    </div>
+    </>
   );
 }
 

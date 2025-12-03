@@ -73,16 +73,16 @@ export default function Header() {
             {!isMahinasPage && (
               <Link
                 href="/marinas"
-                className="group relative inline-flex items-center gap-2 px-6 py-2.5 rounded-full font-semibold text-white overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 hover:scale-105"
+                className="group relative inline-flex items-center gap-2 px-6 py-2.5 rounded-full font-semibold text-white overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 hover:scale-105 backdrop-blur-md"
               >
-                {/* Animated gradient background */}
-                <div className="absolute inset-0 bg-gradient-to-r from-cyan-500 via-blue-500 to-cyan-500 bg-[length:200%_100%] animate-gradient"></div>
+                {/* Glass transparent background */}
+                <div className="absolute inset-0 bg-white/10 border border-white/20"></div>
 
                 {/* Glass top highlight */}
-                <div className="absolute inset-0 bg-gradient-to-b from-white/30 via-white/10 to-transparent"></div>
+                <div className="absolute inset-0 bg-gradient-to-b from-white/20 via-white/5 to-transparent"></div>
 
-                {/* Glow effect */}
-                <div className="absolute -inset-1 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full blur-lg opacity-30 group-hover:opacity-60 transition-opacity duration-300"></div>
+                {/* Subtle glow effect */}
+                <div className="absolute -inset-1 bg-white/20 rounded-full blur-lg opacity-0 group-hover:opacity-40 transition-opacity duration-300"></div>
 
                 <span className="relative z-10 flex items-center gap-2">
                   Book Now
@@ -98,20 +98,23 @@ export default function Header() {
                   ? setShowUserPanel(true)
                   : setShowAuthModal(true)
               }
-              className={`relative p-2.5 rounded-full transition-all duration-300 ${
-                isAuthenticated
-                  ? "bg-gradient-to-br from-cyan-500 to-blue-500 text-white shadow-lg hover:shadow-xl hover:scale-110"
-                  : scrolled || !isHomePage
-                  ? "bg-gray-700/50 border border-gray-600/50 text-white hover:bg-gray-600/50"
-                  : "bg-white/20 border border-white/30 text-white hover:bg-white/30"
-              }`}
+              className="group relative inline-flex items-center justify-center p-2.5 rounded-full overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 hover:scale-105 backdrop-blur-md"
             >
+              {/* Glass transparent background */}
+              <div className="absolute inset-0 bg-white/10 border border-white/20"></div>
+
+              {/* Glass top highlight */}
+              <div className="absolute inset-0 bg-gradient-to-b from-white/20 via-white/5 to-transparent"></div>
+
+              {/* Subtle glow effect */}
+              <div className="absolute -inset-1 bg-white/20 rounded-full blur-lg opacity-0 group-hover:opacity-40 transition-opacity duration-300"></div>
+
               {isAuthenticated ? (
-                <div className="w-6 h-6 flex items-center justify-center font-semibold">
+                <div className="w-6 h-6 flex items-center justify-center font-semibold text-white relative z-10">
                   {user?.full_name?.charAt(0).toUpperCase() || "U"}
                 </div>
               ) : (
-                <FaUser className="w-6 h-6" />
+                <FaUser className="w-6 h-6 text-white relative z-10" />
               )}
             </button>
           </div>
