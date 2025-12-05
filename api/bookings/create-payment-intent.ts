@@ -1,6 +1,10 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { query } from "../../src/lib/db";
 import Stripe from "stripe";
+import {
+  getOrCreateSession,
+  trackCheckoutEvent,
+} from "../lib/visitor-tracking";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
   apiVersion: "2025-02-24.acacia",
@@ -151,6 +155,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
 
     const bookingId = result.insertId;
+
+    // Track checkout started (non-blocking)
+    const sessionId = req.headers["x-session-id"] as string;
+    if (sessionId) {
+      getOrCreateSession(sessionId, userId, marinaId, req).catch(console.error);
+      trackCheckoutEvent({
+        sessionId,
+        userId,
+        marinaId,
+        slipId: slipId || undefined,
+        eventType: "checkout_started",
+        checkInDate: checkIn,
+        checkOutDate: checkOut,
+        totalAmount,
+      }).catch(console.error);
+    }
 
     // Create Stripe payment intent
     const paymentIntent = await stripe.paymentIntents.create({

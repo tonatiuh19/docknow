@@ -2,10 +2,12 @@
 
 import MetaHelmet from "@/components/MetaHelmet";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import axios from "axios";
+import { visitorTracker } from "@/lib/visitor-tracker";
 import {
   FaMapMarkerAlt,
   FaCalendarAlt,
@@ -27,6 +29,50 @@ export default function HomePage() {
     checkIn: "",
     checkOut: "",
   });
+
+  // Track home page visitor
+  useEffect(() => {
+    const trackVisitor = async () => {
+      try {
+        const sessionId = visitorTracker.getSessionId();
+        if (!sessionId) return;
+
+        // Simple device detection
+        const userAgent = navigator.userAgent.toLowerCase();
+        let deviceType = "desktop";
+        if (/mobile|android|iphone|ipad|tablet/.test(userAgent)) {
+          deviceType = /tablet|ipad/.test(userAgent) ? "tablet" : "mobile";
+        }
+
+        // Browser detection
+        let browser = "other";
+        if (userAgent.includes("chrome")) browser = "chrome";
+        else if (userAgent.includes("safari")) browser = "safari";
+        else if (userAgent.includes("firefox")) browser = "firefox";
+        else if (userAgent.includes("edge")) browser = "edge";
+
+        // OS detection
+        let os = "other";
+        if (userAgent.includes("mac")) os = "macos";
+        else if (userAgent.includes("windows")) os = "windows";
+        else if (userAgent.includes("linux")) os = "linux";
+        else if (userAgent.includes("android")) os = "android";
+        else if (userAgent.includes("ios")) os = "ios";
+
+        await axios.post("/api/track-home-visitor", {
+          sessionId,
+          deviceType,
+          browser,
+          os,
+          landingPage: window.location.pathname,
+        });
+      } catch (error) {
+        console.error("Failed to track home visitor:", error);
+      }
+    };
+
+    trackVisitor();
+  }, []);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
