@@ -93,7 +93,14 @@ export default function MarinasPage() {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 via-cyan-50/20 to-slate-50">
+    <>
+      <MetaHelmet
+        title="Find Marina Slips | DockNow"
+        description="Browse and book marina slips across Mexico. Filter by location, amenities, and availability."
+        ogUrl="https://docknow.app/marinas"
+        canonical="https://docknow.app/marinas"
+      />
+      <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 via-cyan-50/20 to-slate-50">
       {/* Professional Header */}
       <Header />
 

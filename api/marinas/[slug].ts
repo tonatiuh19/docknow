@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { query } from "../../src/lib/db";
+import { getOrCreateSession, trackPageView } from "../lib/visitor-tracking";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "GET") {
@@ -59,6 +60,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const marina = (marinaResult as any[])[0];
+
+    // Track page view (non-blocking)
+    const sessionId = req.headers["x-session-id"] as string;
+    if (sessionId) {
+      const userId = req.headers["x-user-id"]
+        ? parseInt(req.headers["x-user-id"] as string)
+        : null;
+      getOrCreateSession(sessionId, userId, marina.id, req).catch(
+        console.error
+      );
+      trackPageView(
+        sessionId,
+        marina.id,
+        `/marinas/${slug}`,
+        "marina_detail"
+      ).catch(console.error);
+    }
 
     // Get images
     const imagesQuery = `

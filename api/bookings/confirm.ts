@@ -1,6 +1,10 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { query } from "@/lib/db";
 import nodemailer from "nodemailer";
+import {
+  getOrCreateSession,
+  trackCheckoutEvent,
+} from "../lib/visitor-tracking";
 
 async function sendBookingConfirmationEmail(
   email: string,
@@ -307,6 +311,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         day: "numeric",
       }
     );
+
+    // Track booking completed (non-blocking)
+    const sessionId = req.headers["x-session-id"] as string;
+    if (sessionId) {
+      const marinaId = await query(
+        "SELECT marina_id, slip_id, user_id FROM bookings WHERE id = ?",
+        [bookingId]
+      );
+      if (marinaId.length > 0) {
+        const bookingData = marinaId[0];
+        getOrCreateSession(
+          sessionId,
+          bookingData.user_id,
+          bookingData.marina_id,
+          req
+        ).catch(console.error);
+        trackCheckoutEvent({
+          sessionId,
+          userId: bookingData.user_id,
+          marinaId: bookingData.marina_id,
+          slipId: bookingData.slip_id || undefined,
+          eventType: "booking_completed",
+          checkInDate: booking.check_in_date,
+          checkOutDate: booking.check_out_date,
+          totalAmount: parseFloat(booking.total_amount),
+          bookingId: bookingId,
+        }).catch(console.error);
+      }
+    }
 
     // Send confirmation email
     console.log("📧 Attempting to send booking confirmation email...");
