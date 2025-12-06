@@ -1,1 +1,1 @@
-export { default } from "../../api/admin/home-analytics";
+export { default } from "../../../api/admin/home-analytics";

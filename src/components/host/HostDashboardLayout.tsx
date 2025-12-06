@@ -16,6 +16,7 @@ import {
   FaHeadset,
   FaCog,
   FaSignOutAlt,
+  FaChartLine,
 } from "react-icons/fa";
 import LoadingSpinner from "@/components/LoadingSpinner";
 
@@ -27,6 +28,7 @@ const navigation = [
   { name: "Dashboard", href: "/host/dashboard", icon: FaHome },
   { name: "Marina Management", href: "/host/marina", icon: FaShip },
   { name: "Bookings", href: "/host/bookings", icon: FaCalendarAlt },
+  { name: "Analytics", href: "/host/analytics", icon: FaChartLine },
   { name: "Payments", href: "/host/payments", icon: FaCreditCard },
   { name: "Guests", href: "/host/guests", icon: FaUsers },
   { name: "Add Features", href: "/host/features", icon: FaPlus },
