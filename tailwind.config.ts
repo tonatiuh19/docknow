@@ -1,109 +1,226 @@
 import type { Config } from "tailwindcss";
 
-const config: Config = {
-  content: [
-    "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
-    "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
-    "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
-  ],
+export default {
+  darkMode: ["class"],
+  content: ["./client/**/*.{ts,tsx}"],
+  prefix: "",
   theme: {
+    container: {
+      center: true,
+      padding: "2rem",
+      screens: {
+        "2xl": "1400px",
+      },
+    },
     extend: {
       colors: {
-        navy: {
-          50: "#f0f4f8",
-          100: "#d9e2ec",
-          200: "#bcccdc",
-          300: "#9fb3c8",
-          400: "#829ab1",
-          500: "#627d98",
-          600: "#486581",
-          700: "#334e68",
-          800: "#243b53",
-          900: "#102a43",
+        border: "hsl(var(--border))",
+        input: "hsl(var(--input))",
+        ring: "hsl(var(--ring))",
+        background: "hsl(var(--background))",
+        foreground: "hsl(var(--foreground))",
+        primary: {
+          DEFAULT: "hsl(var(--primary))",
+          foreground: "hsl(var(--primary-foreground))",
         },
+        secondary: {
+          DEFAULT: "hsl(var(--secondary))",
+          foreground: "hsl(var(--secondary-foreground))",
+        },
+        destructive: {
+          DEFAULT: "hsl(var(--destructive))",
+          foreground: "hsl(var(--destructive-foreground))",
+        },
+        muted: {
+          DEFAULT: "hsl(var(--muted))",
+          foreground: "hsl(var(--muted-foreground))",
+        },
+        accent: {
+          DEFAULT: "hsl(var(--accent))",
+          foreground: "hsl(var(--accent-foreground))",
+        },
+        popover: {
+          DEFAULT: "hsl(var(--popover))",
+          foreground: "hsl(var(--popover-foreground))",
+        },
+        card: {
+          DEFAULT: "hsl(var(--card))",
+          foreground: "hsl(var(--card-foreground))",
+        },
+        sidebar: {
+          DEFAULT: "hsl(var(--sidebar-background))",
+          foreground: "hsl(var(--sidebar-foreground))",
+          primary: "hsl(var(--sidebar-primary))",
+          "primary-foreground": "hsl(var(--sidebar-primary-foreground))",
+          accent: "hsl(var(--sidebar-accent))",
+          "accent-foreground": "hsl(var(--sidebar-accent-foreground))",
+          border: "hsl(var(--sidebar-border))",
+          ring: "hsl(var(--sidebar-ring))",
+        },
+        // Maritime Brand Colors
         ocean: {
-          50: "#e6fcff",
-          100: "#b3f5ff",
-          200: "#80edff",
-          300: "#4de4ff",
-          400: "#1ad9ff",
-          500: "#00c4e6",
-          600: "#0099b3",
-          700: "#006d80",
-          800: "#00424d",
-          900: "#00171a",
+          50: "hsl(var(--ocean-50))",
+          100: "hsl(var(--ocean-100))",
+          200: "hsl(var(--ocean-200))",
+          300: "hsl(var(--ocean-300))",
+          400: "hsl(var(--ocean-400))",
+          500: "hsl(var(--ocean-500))",
+          600: "hsl(var(--ocean-600))",
+          700: "hsl(var(--ocean-700))",
+          800: "hsl(var(--ocean-800))",
+          900: "hsl(var(--ocean-900))",
+          950: "hsl(var(--ocean-950))",
+        },
+        navy: {
+          50: "hsl(var(--navy-50))",
+          100: "hsl(var(--navy-100))",
+          200: "hsl(var(--navy-200))",
+          300: "hsl(var(--navy-300))",
+          400: "hsl(var(--navy-400))",
+          500: "hsl(var(--navy-500))",
+          600: "hsl(var(--navy-600))",
+          700: "hsl(var(--navy-700))",
+          800: "hsl(var(--navy-800))",
+          900: "hsl(var(--navy-900))",
+          950: "hsl(var(--navy-950))",
+        },
+        gray: {
+          50: "hsl(var(--gray-50))",
+          100: "hsl(var(--gray-100))",
+          200: "hsl(var(--gray-200))",
+          300: "hsl(var(--gray-300))",
+          400: "hsl(var(--gray-400))",
+          500: "hsl(var(--gray-500))",
+          600: "hsl(var(--gray-600))",
+          700: "hsl(var(--gray-700))",
+          800: "hsl(var(--gray-800))",
+          900: "hsl(var(--gray-900))",
+        },
+        orange: {
+          50: "hsl(var(--coral-50))",
+          100: "hsl(var(--coral-100))",
+          200: "hsl(var(--coral-200))",
+          300: "hsl(var(--coral-300))",
+          400: "hsl(var(--coral-400))",
+          500: "hsl(var(--coral-500))",
+          600: "hsl(var(--coral-600))",
+          700: "hsl(var(--coral-700))",
+          800: "hsl(var(--coral-800))",
+          900: "hsl(var(--coral-900))",
+        },
+        purple: {
+          50: "hsl(var(--wave-50))",
+          100: "hsl(var(--wave-100))",
+          200: "hsl(var(--wave-200))",
+          300: "hsl(var(--wave-300))",
+          400: "hsl(var(--wave-400))",
+          500: "hsl(var(--wave-500))",
+          600: "hsl(var(--wave-600))",
+          700: "hsl(var(--wave-700))",
+          800: "hsl(var(--wave-800))",
+          900: "hsl(var(--wave-900))",
+        },
+        green: {
+          50: "hsl(var(--green-50))",
+          100: "hsl(var(--green-100))",
+          200: "hsl(var(--green-200))",
+          300: "hsl(var(--green-300))",
+          400: "hsl(var(--green-400))",
+          500: "hsl(var(--green-500))",
+          600: "hsl(var(--green-600))",
+          700: "hsl(var(--green-700))",
+          800: "hsl(var(--green-800))",
+          900: "hsl(var(--green-900))",
+        },
+        yellow: {
+          50: "hsl(var(--yellow-50))",
+          100: "hsl(var(--yellow-100))",
+          200: "hsl(var(--yellow-200))",
+          300: "hsl(var(--yellow-300))",
+          400: "hsl(var(--yellow-400))",
+          500: "hsl(var(--yellow-500))",
+          600: "hsl(var(--yellow-600))",
+          700: "hsl(var(--yellow-700))",
+          800: "hsl(var(--yellow-800))",
+          900: "hsl(var(--yellow-900))",
+        },
+        red: {
+          50: "hsl(var(--red-50))",
+          100: "hsl(var(--red-100))",
+          200: "hsl(var(--red-200))",
+          300: "hsl(var(--red-300))",
+          400: "hsl(var(--red-400))",
+          500: "hsl(var(--red-500))",
+          600: "hsl(var(--red-600))",
+          700: "hsl(var(--red-700))",
+          800: "hsl(var(--red-800))",
+          900: "hsl(var(--red-900))",
+        },
+        wave: {
+          50: "hsl(var(--wave-50))",
+          100: "hsl(var(--wave-100))",
+          200: "hsl(var(--wave-200))",
+          300: "hsl(var(--wave-300))",
+          400: "hsl(var(--wave-400))",
+          500: "hsl(var(--wave-500))",
+          600: "hsl(var(--wave-600))",
+          700: "hsl(var(--wave-700))",
+          800: "hsl(var(--wave-800))",
+          900: "hsl(var(--wave-900))",
+          950: "hsl(var(--wave-950))",
+        },
+        coral: {
+          50: "hsl(var(--coral-50))",
+          100: "hsl(var(--coral-100))",
+          200: "hsl(var(--coral-200))",
+          300: "hsl(var(--coral-300))",
+          400: "hsl(var(--coral-400))",
+          500: "hsl(var(--coral-500))",
+          600: "hsl(var(--coral-600))",
+          700: "hsl(var(--coral-700))",
+          800: "hsl(var(--coral-800))",
+          900: "hsl(var(--coral-900))",
+          950: "hsl(var(--coral-950))",
         },
       },
-      fontFamily: {
-        sans: ["Inter", "system-ui", "sans-serif"],
+      borderRadius: {
+        lg: "var(--radius)",
+        md: "calc(var(--radius) - 2px)",
+        sm: "calc(var(--radius) - 4px)",
+      },
+      boxShadow: {
+        'ocean-sm': '0 1px 2px 0 rgba(2, 132, 199, 0.1)',
+        'ocean-md': '0 4px 6px -1px rgba(2, 132, 199, 0.1), 0 2px 4px -1px rgba(2, 132, 199, 0.06)',
+        'ocean-lg': '0 10px 15px -3px rgba(2, 132, 199, 0.1), 0 4px 6px -2px rgba(2, 132, 199, 0.05)',
+        'glow': '0 0 15px rgba(2, 132, 199, 0.3)',
       },
       backgroundImage: {
-        "gradient-radial": "radial-gradient(var(--tw-gradient-stops))",
-        "gradient-conic":
-          "conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))",
-      },
-      animation: {
-        "fade-in": "fadeIn 0.5s ease-out",
-        "slide-up": "slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1)",
-        shake: "shake 0.5s ease-in-out",
-        "scale-in": "scaleIn 0.4s cubic-bezier(0.16, 1, 0.3, 1)",
-        shimmer: "shimmer 2s ease-in-out infinite",
-        fadeIn: "fadeIn 0.3s ease-out",
-        slideDown: "slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
+        'gradient-ocean': 'linear-gradient(135deg, #0284c7 0%, #075985 100%)',
+        'gradient-hero': 'linear-gradient(135deg, #1e293b 0%, #0369a1 50%, #0284c7 100%)',
       },
       keyframes: {
-        fadeIn: {
-          "0%": { opacity: "0" },
-          "100%": { opacity: "1" },
-        },
-        slideUp: {
-          "0%": {
-            transform: "translateY(30px) scale(0.95)",
-            opacity: "0",
-            filter: "blur(10px)",
+        "accordion-down": {
+          from: {
+            height: "0",
           },
-          "100%": {
-            transform: "translateY(0) scale(1)",
-            opacity: "1",
-            filter: "blur(0px)",
+          to: {
+            height: "var(--radix-accordion-content-height)",
           },
         },
-        slideDown: {
-          "0%": {
-            transform: "translateY(-10px) scale(0.95)",
-            opacity: "0",
+        "accordion-up": {
+          from: {
+            height: "var(--radix-accordion-content-height)",
           },
-          "100%": {
-            transform: "translateY(0) scale(1)",
-            opacity: "1",
+          to: {
+            height: "0",
           },
         },
-        shake: {
-          "0%, 100%": { transform: "translateX(0)" },
-          "10%, 30%, 50%, 70%, 90%": { transform: "translateX(-4px)" },
-          "20%, 40%, 60%, 80%": { transform: "translateX(4px)" },
-        },
-        scaleIn: {
-          "0%": {
-            transform: "scale(0.9)",
-            opacity: "0",
-          },
-          "100%": {
-            transform: "scale(1)",
-            opacity: "1",
-          },
-        },
-        shimmer: {
-          "0%, 100%": {
-            backgroundPosition: "200% center",
-          },
-          "50%": {
-            backgroundPosition: "-200% center",
-          },
-        },
+      },
+      animation: {
+        "accordion-down": "accordion-down 0.2s ease-out",
+        "accordion-up": "accordion-up 0.2s ease-out",
       },
     },
   },
-  plugins: [],
-};
-export default config;
+  plugins: [require("tailwindcss-animate")],
+} satisfies Config;
