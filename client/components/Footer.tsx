@@ -37,6 +37,7 @@ const Footer = () => {
     { href: "/investors", label: "Investors" },
     { href: "/privacy", label: "Privacy Policy" },
     { href: "/accessibility", label: "Accessibility" },
+    { href: "/host/login", label: "Marina Host Portal" },
   ];
 
   const socialLinks = [
@@ -53,14 +54,12 @@ const Footer = () => {
           {/* Brand Section */}
           <div className="lg:col-span-2">
             <Link to="/" className="flex items-center space-x-2 mb-6">
-              <div className="w-10 h-10 rounded-lg flex items-center justify-center overflow-hidden">
+              <div className="w-20 h-10 rounded-lg flex items-center justify-center overflow-hidden">
                 <img
                   src="https://garbrix.com/navios/assets/images/logo.png"
                   alt="Dock Now"
-                  className="w-10 h-10 object-contain"
                 />
               </div>
-              <span className="text-2xl font-bold text-white">Dock Now</span>
             </Link>
             <p className="text-navy-300 mb-6 max-w-sm">
               The world's leading platform for discovering and reserving boat

@@ -216,6 +216,9 @@ export interface AvailabilityResponse {
     reason: string;
     slipId?: number;
     slipNumber?: string;
+    startTime?: string | null;
+    endTime?: string | null;
+    isAllDay?: number;
   }>;
   availableSlips: Array<{
     id: number;

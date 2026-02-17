@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost:3306
--- Generation Time: Feb 13, 2026 at 11:11 PM
+-- Generation Time: Feb 16, 2026 at 06:36 PM
 -- Server version: 5.7.23-23
 -- PHP Version: 8.1.34
 
@@ -179,6 +179,13 @@ CREATE TABLE `boats` (
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+--
+-- Dumping data for table `boats`
+--
+
+INSERT INTO `boats` (`id`, `owner_id`, `name`, `model`, `manufacturer`, `boat_type_id`, `year`, `length_meters`, `width_meters`, `draft_meters`, `home_marina`, `registration_number`, `insurance_provider`, `insurance_policy_number`, `is_active`, `created_at`, `updated_at`) VALUES
+(2, 7, 'Boat Test', 'Mustang Ocean', 'Ford', 3, '2025', 6.00, 3.00, 1.00, NULL, NULL, NULL, NULL, 1, '2026-02-14 05:56:20', '2026-02-14 05:56:20');
+
 -- --------------------------------------------------------
 
 --
@@ -239,6 +246,14 @@ CREATE TABLE `bookings` (
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `bookings`
+--
+
+INSERT INTO `bookings` (`id`, `user_id`, `marina_id`, `slip_id`, `boat_id`, `check_in_date`, `check_out_date`, `total_days`, `price_per_day`, `subtotal`, `service_fee`, `discount_amount`, `total_amount`, `coupon_code`, `status`, `requires_approval`, `approved_at`, `approved_by`, `stripe_payment_intent_id`, `cancelled_at`, `cancellation_reason`, `special_requests`, `pre_checkout_completed`, `pre_checkout_completed_at`, `created_at`, `updated_at`) VALUES
+(14, 7, 10, 29, 2, '2026-02-15', '2026-02-18', 3, 185.00, 555.00, 55.50, 0.00, 610.50, NULL, 'confirmed', 0, NULL, NULL, 'pi_3T0c4eGnfvtfvDAr0jBo5RiJ', NULL, NULL, NULL, 0, NULL, '2026-02-14 06:11:24', '2026-02-14 06:21:09'),
+(15, 7, 10, 28, 2, '2026-02-22', '2026-02-25', 3, 185.00, 555.00, 55.50, 0.00, 610.50, NULL, 'pending', 0, NULL, NULL, 'pi_3T1YkiGnfvtfvDAr1O4Nld30', NULL, NULL, NULL, 0, NULL, '2026-02-16 20:50:44', '2026-02-16 20:50:44');
 
 -- --------------------------------------------------------
 
@@ -527,6 +542,8 @@ CREATE TABLE `home_visitor_stats` (
 
 CREATE TABLE `hosts` (
   `id` int(10) UNSIGNED NOT NULL,
+  `marina_id` int(10) UNSIGNED DEFAULT NULL,
+  `role` enum('primary','manager','staff') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'manager',
   `email` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `full_name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `phone` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -544,8 +561,8 @@ CREATE TABLE `hosts` (
 -- Dumping data for table `hosts`
 --
 
-INSERT INTO `hosts` (`id`, `email`, `full_name`, `phone`, `phone_code`, `country_code`, `profile_image_url`, `company_name`, `is_active`, `email_verified`, `created_at`, `updated_at`) VALUES
-(1, 'axgoomez@gmail.com', 'Alex Gomez', '3121234567', '+52', 'MX', NULL, NULL, 1, 1, '2025-11-29 23:46:15', '2025-12-03 03:32:50');
+INSERT INTO `hosts` (`id`, `marina_id`, `role`, `email`, `full_name`, `phone`, `phone_code`, `country_code`, `profile_image_url`, `company_name`, `is_active`, `email_verified`, `created_at`, `updated_at`) VALUES
+(1, 10, 'primary', 'axgoomez@gmail.com', 'Alex Gomez', '3121234567', '+52', 'MX', NULL, NULL, 1, 1, '2025-11-29 23:46:15', '2026-02-17 00:24:17');
 
 -- --------------------------------------------------------
 
@@ -584,7 +601,8 @@ INSERT INTO `host_sessions` (`id`, `host_id`, `verification_code`, `is_verified`
 (15, 1, '821002', 1, '2025-12-19 17:56:20', '2025-12-19 17:56:03'),
 (16, 1, '484777', 1, '2026-01-27 04:30:42', '2026-01-27 04:30:27'),
 (17, 1, '671269', 0, '2026-02-13 01:39:17', '2026-02-13 01:24:17'),
-(18, 1, '235745', 1, '2026-02-13 01:25:01', '2026-02-13 01:24:47');
+(18, 1, '235745', 1, '2026-02-13 01:25:01', '2026-02-13 01:24:47'),
+(19, 1, '606222', 1, '2026-02-16 22:12:12', '2026-02-16 22:11:56');
 
 -- --------------------------------------------------------
 
@@ -1077,6 +1095,22 @@ CREATE TABLE `seabeds` (
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+--
+-- Dumping data for table `seabeds`
+--
+
+INSERT INTO `seabeds` (`id`, `marina_id`, `anchorage_id`, `seabed_type_id`, `description`, `depth_meters`, `notes`, `created_at`) VALUES
+(23, 10, 9, 2, 'Muddy bottom in protected anchorage provides excellent holding', 15.00, 'Excellent anchor holding, recommended for overnight stays', '2026-02-14 05:17:07'),
+(24, 10, 10, 1, 'Sandy bottom with patches of mud, good holding quality', 12.00, 'Good holding in most weather conditions', '2026-02-14 05:17:07'),
+(25, 11, 11, 1, 'Sandy bottom typical of Gulf Coast waters', 9.00, 'Good holding for most anchor types', '2026-02-14 05:17:07'),
+(26, 11, 12, 8, 'Mixed sand and shell bottom composition', 7.00, 'Moderate holding, check anchor frequently', '2026-02-14 05:17:07'),
+(27, 12, 13, 1, 'Clean sandy bottom in harbor waters', 18.00, 'Good holding, easy anchor retrieval', '2026-02-14 05:17:07'),
+(28, 12, 14, 3, 'Clay bottom provides excellent anchor holding', 22.00, 'Excellent holding but may require windlass for retrieval', '2026-02-14 05:17:07'),
+(29, 13, 15, 2, 'Muddy bottom with excellent holding characteristics', 6.00, 'Excellent holding, popular with fishing boats', '2026-02-14 05:17:07'),
+(30, 13, 16, 8, 'Mixed mud and sand bottom in protected bayou', 4.00, 'Good holding in calm conditions', '2026-02-14 05:17:07'),
+(31, 14, 17, 2, 'Deep mud bottom with excellent holding quality', 25.00, 'Excellent holding even in strong tidal currents', '2026-02-14 05:17:07'),
+(32, 14, 18, 6, 'Gravel and sand mix typical of Pacific Northwest', 35.00, 'Moderate holding, suitable for short stays', '2026-02-14 05:17:07');
+
 -- --------------------------------------------------------
 
 --
@@ -1377,7 +1411,10 @@ CREATE TABLE `user_sessions` (
 --
 
 INSERT INTO `user_sessions` (`id`, `user_id`, `verification_code`, `is_verified`, `expires_at`, `created_at`) VALUES
-(23, 7, '657798', 1, '2026-02-14 04:18:33', '2026-02-14 04:18:03');
+(23, 7, '657798', 1, '2026-02-14 04:18:33', '2026-02-14 04:18:03'),
+(24, 7, '766860', 1, '2026-02-14 05:54:08', '2026-02-14 05:53:53'),
+(25, 7, '909805', 1, '2026-02-16 21:01:10', '2026-02-16 21:00:47'),
+(26, 7, '843596', 1, '2026-02-16 21:15:43', '2026-02-16 21:15:32');
 
 -- --------------------------------------------------------
 
@@ -1777,7 +1814,9 @@ ALTER TABLE `hosts`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `email` (`email`),
   ADD KEY `is_active` (`is_active`),
-  ADD KEY `email_verified` (`email_verified`);
+  ADD KEY `email_verified` (`email_verified`),
+  ADD KEY `idx_marina_id` (`marina_id`),
+  ADD KEY `idx_role` (`role`);
 
 --
 -- Indexes for table `host_sessions`
@@ -2093,7 +2132,7 @@ ALTER TABLE `blocked_dates`
 -- AUTO_INCREMENT for table `boats`
 --
 ALTER TABLE `boats`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
 --
 -- AUTO_INCREMENT for table `boat_types`
@@ -2105,7 +2144,7 @@ ALTER TABLE `boat_types`
 -- AUTO_INCREMENT for table `bookings`
 --
 ALTER TABLE `bookings`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=14;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=16;
 
 --
 -- AUTO_INCREMENT for table `cancellation_requests`
@@ -2165,7 +2204,7 @@ ALTER TABLE `hosts`
 -- AUTO_INCREMENT for table `host_sessions`
 --
 ALTER TABLE `host_sessions`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=19;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=20;
 
 --
 -- AUTO_INCREMENT for table `marinas`
@@ -2261,7 +2300,7 @@ ALTER TABLE `reviews`
 -- AUTO_INCREMENT for table `seabeds`
 --
 ALTER TABLE `seabeds`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=23;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=33;
 
 --
 -- AUTO_INCREMENT for table `seabed_types`
@@ -2315,7 +2354,7 @@ ALTER TABLE `users`
 -- AUTO_INCREMENT for table `user_sessions`
 --
 ALTER TABLE `user_sessions`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=24;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=27;
 
 --
 -- AUTO_INCREMENT for table `visitor_checkout_events`
@@ -2410,6 +2449,12 @@ ALTER TABLE `guest_step_submissions`
 ALTER TABLE `guest_step_uploads`
   ADD CONSTRAINT `guest_step_uploads_ibfk_1` FOREIGN KEY (`submission_id`) REFERENCES `guest_step_submissions` (`id`) ON DELETE CASCADE,
   ADD CONSTRAINT `guest_step_uploads_ibfk_2` FOREIGN KEY (`field_id`) REFERENCES `pre_checkout_step_fields` (`id`) ON DELETE CASCADE;
+
+--
+-- Constraints for table `hosts`
+--
+ALTER TABLE `hosts`
+  ADD CONSTRAINT `hosts_ibfk_marina` FOREIGN KEY (`marina_id`) REFERENCES `marinas` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `host_sessions`

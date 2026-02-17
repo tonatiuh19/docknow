@@ -8,6 +8,12 @@ import authReducer from "./slices/authSlice";
 import bookingReducer from "./slices/bookingSlice";
 import reservationsReducer from "./slices/reservationsSlice";
 import profileReducer from "./slices/profileSlice";
+import hostAuthReducer from "./slices/hostAuthSlice";
+import adminDashboardReducer from "./slices/adminDashboardSlice";
+import adminBookingsReducer from "./slices/adminBookingsSlice";
+import adminPaymentsReducer from "./slices/adminPaymentsSlice";
+import adminHostsReducer from "./slices/adminHostsSlice";
+import adminMarinasReducer from "./slices/adminMarinasSlice";
 
 export const store = configureStore({
   reducer: {
@@ -18,6 +24,12 @@ export const store = configureStore({
     booking: bookingReducer,
     reservations: reservationsReducer,
     profile: profileReducer,
+    hostAuth: hostAuthReducer,
+    adminDashboard: adminDashboardReducer,
+    adminBookings: adminBookingsReducer,
+    adminPayments: adminPaymentsReducer,
+    adminHosts: adminHostsReducer,
+    adminMarinas: adminMarinasReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

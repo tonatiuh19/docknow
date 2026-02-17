@@ -25,6 +25,7 @@ interface BookingAvailability {
 
 interface Props {
   marinaId: number;
+  totalSlips: number;
   availability: BookingAvailability | null;
   selectedDateRange: {
     checkIn: string | null; // ISO string from Redux
@@ -41,6 +42,7 @@ interface Props {
 
 const BookingCalendar: React.FC<Props> = ({
   marinaId,
+  totalSlips,
   availability,
   selectedDateRange,
   selectedSlip,
@@ -78,14 +80,29 @@ const BookingCalendar: React.FC<Props> = ({
     if (!availability) return 0;
 
     const dateStr = date.toISOString().split("T")[0];
-    let availableCount = availability.availableSlips.length;
+    const baseSlipCount =
+      totalSlips > 0 ? totalSlips : availability.availableSlips.length;
+    let availableCount = baseSlipCount;
+
+    let hasMarinaWideBlock = false;
+    const blockedSlipIds = new Set<number>();
 
     // Reduce count for blocked dates
     availability.blockedDates.forEach((blocked) => {
-      if (blocked.date === dateStr && blocked.slipId) {
-        availableCount--;
+      if (blocked.date === dateStr) {
+        if (!blocked.slipId) {
+          hasMarinaWideBlock = true;
+          return;
+        }
+        blockedSlipIds.add(blocked.slipId);
       }
     });
+
+    if (hasMarinaWideBlock) {
+      return 0;
+    }
+
+    availableCount -= blockedSlipIds.size;
 
     // Reduce count for booked dates
     availability.bookedDates.forEach((booking) => {

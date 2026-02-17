@@ -99,6 +99,9 @@ export interface MarinaDetail {
       reason: string;
       slipId?: number;
       slipNumber?: string;
+      startTime?: string | null;
+      endTime?: string | null;
+      isAllDay?: number;
     }>;
     bookedDates: Array<{ checkIn: string; checkOut: string }>;
   };
@@ -113,6 +116,9 @@ export interface MarinaAvailability {
     reason: string;
     slipId?: number;
     slipNumber?: string;
+    startTime?: string | null;
+    endTime?: string | null;
+    isAllDay?: number;
   }>;
   availableSlips: Array<{
     id: number;
@@ -148,11 +154,11 @@ export const fetchMarinaDetail = createAsyncThunk(
 
 export const fetchMarinaAvailability = createAsyncThunk(
   "marinaDetail/fetchMarinaAvailability",
-  async (marinaId: number) => {
+  async (params: { marinaId: number; checkIn?: string; checkOut?: string }) => {
     const { data } = await axios.get<MarinaAvailabilityApiResponse>(
       `${apiBaseURL}/api/marinas/availability`,
       {
-        params: { marinaId },
+        params,
       },
     );
 

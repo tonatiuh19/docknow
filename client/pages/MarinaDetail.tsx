@@ -116,9 +116,24 @@ const MarinaDetail: React.FC = () => {
 
   useEffect(() => {
     if (marina?.id) {
-      dispatch(fetchMarinaAvailability(marina.id));
+      if (selectedDateRange.checkIn && selectedDateRange.checkOut) {
+        dispatch(
+          fetchMarinaAvailability({
+            marinaId: marina.id,
+            checkIn: selectedDateRange.checkIn.split("T")[0],
+            checkOut: selectedDateRange.checkOut.split("T")[0],
+          }),
+        );
+      } else if (!selectedDateRange.checkIn && !selectedDateRange.checkOut) {
+        dispatch(fetchMarinaAvailability({ marinaId: marina.id }));
+      }
     }
-  }, [marina?.id, dispatch]);
+  }, [
+    marina?.id,
+    selectedDateRange.checkIn,
+    selectedDateRange.checkOut,
+    dispatch,
+  ]);
 
   // Check authentication status on mount
   useEffect(() => {
@@ -186,7 +201,7 @@ const MarinaDetail: React.FC = () => {
   };
 
   // Loading state
-  if (loading) {
+  if (loading && !marina) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
         <motion.div
@@ -557,6 +572,7 @@ const MarinaDetail: React.FC = () => {
                   <div className="p-6">
                     <BookingCalendar
                       marinaId={marina.id}
+                      totalSlips={marina.total_slips || 0}
                       availability={availability}
                       selectedDateRange={selectedDateRange}
                       selectedSlip={selectedSlipDetails}

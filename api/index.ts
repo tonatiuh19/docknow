@@ -1727,12 +1727,13 @@ const handleHostBookings = async (req: AuthenticatedRequest, res: Response) => {
              COUNT(DISTINCT CASE WHEN gss.is_completed = 1 THEN gss.id END) as completed_submissions
       FROM bookings b
       INNER JOIN marinas m ON b.marina_id = m.id
+      INNER JOIN hosts h ON h.marina_id = m.id
       LEFT JOIN slips s ON b.slip_id = s.id
       INNER JOIN users u ON b.user_id = u.id
       LEFT JOIN boats bo ON b.boat_id = bo.id
       LEFT JOIN boat_types bt ON bo.boat_type_id = bt.id
       LEFT JOIN guest_step_submissions gss ON b.id = gss.booking_id
-      WHERE m.host_id = ?
+      WHERE h.id = ?
     `;
     const params: any[] = [hostId];
 
@@ -1765,6 +1766,210 @@ const handleHostBookings = async (req: AuthenticatedRequest, res: Response) => {
 };
 
 /**
+ * GET /api/host/blocked-dates
+ * Get blocked dates for host managed marinas
+ */
+const handleHostBlockedDates = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
+  try {
+    const hostId = (req as any).authHostId;
+    const { marinaId, startDate, endDate } = req.query;
+
+    let queryStr = `
+      SELECT bd.id, bd.marina_id, bd.slip_id, bd.blocked_date,
+             bd.reason, bd.start_time, bd.end_time, bd.is_all_day, bd.created_at,
+             m.name as marina_name, s.slip_number
+      FROM blocked_dates bd
+      INNER JOIN marinas m ON bd.marina_id = m.id
+      INNER JOIN hosts h ON h.marina_id = m.id
+      LEFT JOIN slips s ON bd.slip_id = s.id
+      WHERE h.id = ?
+    `;
+    const params: any[] = [hostId];
+
+    if (marinaId) {
+      queryStr += " AND bd.marina_id = ?";
+      params.push(marinaId);
+    }
+    if (startDate) {
+      queryStr += " AND bd.blocked_date >= ?";
+      params.push(startDate);
+    }
+    if (endDate) {
+      queryStr += " AND bd.blocked_date <= ?";
+      params.push(endDate);
+    }
+
+    queryStr += " ORDER BY bd.blocked_date ASC, bd.start_time ASC";
+
+    const blockedDates = await query<RowDataPacket[]>(queryStr, params);
+
+    res.json({ success: true, blockedDates });
+  } catch (error) {
+    console.error("Error fetching host blocked dates:", error);
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to fetch blocked dates" });
+  }
+};
+
+/**
+ * POST /api/host/blocked-dates
+ * Create blocked date(s) for host managed marina
+ */
+const handleCreateHostBlockedDate = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
+  try {
+    const hostId = Number((req as any).authHostId);
+    const {
+      marinaId,
+      slipId,
+      startDate,
+      endDate,
+      reason,
+      isAllDay,
+      startTime,
+      endTime,
+    } = req.body;
+
+    const normalizedReason = String(reason || "").trim();
+
+    if (!marinaId || !startDate) {
+      return res.status(400).json({
+        success: false,
+        error: "marinaId and startDate are required",
+      });
+    }
+
+    if (!normalizedReason) {
+      return res.status(400).json({
+        success: false,
+        error: "reason is required",
+      });
+    }
+
+    const marinaAccess = await query<RowDataPacket[]>(
+      `SELECT 1 FROM hosts WHERE id = ? AND marina_id = ? LIMIT 1`,
+      [hostId, marinaId],
+    );
+
+    if (marinaAccess.length === 0) {
+      return res.status(403).json({ success: false, error: "Unauthorized" });
+    }
+
+    if (slipId) {
+      const slipExists = await query<RowDataPacket[]>(
+        `SELECT id FROM slips WHERE id = ? AND marina_id = ? LIMIT 1`,
+        [slipId, marinaId],
+      );
+      if (slipExists.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: "Slip does not belong to selected marina",
+        });
+      }
+    }
+
+    const start = new Date(startDate);
+    const end = new Date(endDate || startDate);
+
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      return res
+        .status(400)
+        .json({ success: false, error: "Invalid date range" });
+    }
+
+    if (end < start) {
+      return res.status(400).json({
+        success: false,
+        error: "endDate cannot be before startDate",
+      });
+    }
+
+    const allDay = isAllDay !== false;
+
+    if (!allDay) {
+      if (!startTime || !endTime) {
+        return res.status(400).json({
+          success: false,
+          error: "startTime and endTime are required for time intervals",
+        });
+      }
+
+      if (String(endTime) <= String(startTime)) {
+        return res.status(400).json({
+          success: false,
+          error: "endTime must be after startTime",
+        });
+      }
+    }
+
+    const dates: string[] = [];
+    const currentDate = new Date(start);
+    while (currentDate <= end) {
+      dates.push(currentDate.toISOString().slice(0, 10));
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    let inserted = 0;
+    for (const dateValue of dates) {
+      const result = await query<ResultSetHeader>(
+        `INSERT INTO blocked_dates (
+          marina_id, slip_id, blocked_date, reason, created_by,
+          start_time, end_time, is_all_day, created_at
+        )
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, NOW()
+        FROM DUAL
+        WHERE NOT EXISTS (
+          SELECT 1 FROM blocked_dates
+          WHERE marina_id = ?
+            AND IFNULL(slip_id, 0) = IFNULL(?, 0)
+            AND blocked_date = ?
+            AND IFNULL(start_time, '00:00:00') = IFNULL(?, '00:00:00')
+            AND IFNULL(end_time, '00:00:00') = IFNULL(?, '00:00:00')
+            AND is_all_day = ?
+        )`,
+        [
+          marinaId,
+          slipId || null,
+          dateValue,
+          normalizedReason,
+          hostId,
+          allDay ? null : startTime || null,
+          allDay ? null : endTime || null,
+          allDay,
+          marinaId,
+          slipId || null,
+          dateValue,
+          allDay ? null : startTime || null,
+          allDay ? null : endTime || null,
+          allDay,
+        ],
+      );
+
+      if (result.affectedRows > 0) {
+        inserted += 1;
+      }
+    }
+
+    res.status(201).json({
+      success: true,
+      inserted,
+      requested: dates.length,
+    });
+  } catch (error) {
+    console.error("Error creating host blocked date:", error);
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to create blocked date" });
+  }
+};
+
+/**
  * GET /api/host/marinas
  * Get all marinas for host
  */
@@ -1773,12 +1978,13 @@ const handleHostMarinas = async (req: AuthenticatedRequest, res: Response) => {
     const hostId = (req as any).authHostId;
 
     const marinas = await query<RowDataPacket[]>(
-      `SELECT m.*, bt.name as business_type_name,
+      `SELECT m.*, bt.name as business_type_name, h.role as host_role,
        (SELECT COUNT(*) FROM slips WHERE marina_id = m.id) as total_slips,
        (SELECT COUNT(*) FROM slips WHERE marina_id = m.id AND is_available = TRUE) as available_slips
        FROM marinas m
+       INNER JOIN hosts h ON h.marina_id = m.id
        LEFT JOIN marina_business_types bt ON m.business_type_id = bt.id
-       WHERE m.host_id = ?
+      WHERE h.id = ?
        ORDER BY m.created_at DESC`,
       [hostId],
     );
@@ -1803,7 +2009,8 @@ const handleHostSlips = async (req: AuthenticatedRequest, res: Response) => {
       SELECT s.*, m.name as marina_name
       FROM slips s
       INNER JOIN marinas m ON s.marina_id = m.id
-      WHERE m.host_id = ?
+      INNER JOIN hosts h ON h.marina_id = m.id
+      WHERE h.id = ?
     `;
     const params: any[] = [hostId];
 
@@ -1823,6 +2030,1012 @@ const handleHostSlips = async (req: AuthenticatedRequest, res: Response) => {
   }
 };
 
+const handleHostMarinaManagement = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
+  try {
+    const hostId = (req as any).authHostId;
+
+    const marinas = await query<RowDataPacket[]>(
+      `SELECT m.id, m.name, m.city, m.state, m.country, m.is_active, m.updated_at,
+              m.price_per_day as marina_price_per_day
+       FROM marinas m
+       INNER JOIN hosts h ON h.marina_id = m.id
+      WHERE h.id = ?
+       ORDER BY m.name ASC`,
+      [hostId],
+    );
+
+    if (!marinas.length) {
+      return res.json({ success: true, marinas: [] });
+    }
+
+    const marinaIds = marinas.map((marina) => Number(marina.id));
+    const inPlaceholders = marinaIds.map(() => "?").join(",");
+
+    const [
+      slips,
+      marinaFeatures,
+      amenities,
+      anchorages,
+      seabeds,
+      moorings,
+      points,
+    ] = await Promise.all([
+      query<RowDataPacket[]>(
+        `SELECT s.id, s.marina_id, s.slip_number, s.length_meters, s.width_meters, s.depth_meters,
+                s.price_per_day, s.is_available, s.is_reserved, s.has_power, s.has_water,
+                s.power_capacity_amps, s.notes, s.updated_at
+         FROM slips s
+         WHERE s.marina_id IN (${inPlaceholders})
+         ORDER BY s.marina_id, s.slip_number`,
+        marinaIds,
+      ),
+      query<RowDataPacket[]>(
+        `SELECT mf.id, mf.marina_id, mf.has_fuel_dock, mf.has_pump_out, mf.has_haul_out,
+                mf.has_boat_ramp, mf.has_dry_storage, mf.has_live_aboard,
+                mf.max_haul_out_weight_tons, mf.accepts_transients, mf.accepts_megayachts,
+                mf.updated_at
+         FROM marina_features mf
+         WHERE mf.marina_id IN (${inPlaceholders})`,
+        marinaIds,
+      ),
+      query<RowDataPacket[]>(
+        `SELECT ma.id, ma.marina_id, ma.amenity_id, at.name, at.slug, at.category, at.icon,
+                ma.created_at
+         FROM marina_amenities ma
+         INNER JOIN amenity_types at ON at.id = ma.amenity_id
+         WHERE ma.marina_id IN (${inPlaceholders})
+         ORDER BY ma.marina_id, at.name`,
+        marinaIds,
+      ),
+      query<RowDataPacket[]>(
+        `SELECT a.id, a.marina_id, a.anchorage_type_id, at.name as anchorage_type_name,
+                a.name, a.description, a.latitude, a.longitude, a.max_depth_meters,
+                a.min_depth_meters, a.capacity, a.price_per_day, a.protection_level,
+                a.is_available, a.updated_at
+         FROM anchorages a
+         INNER JOIN anchorage_types at ON at.id = a.anchorage_type_id
+         WHERE a.marina_id IN (${inPlaceholders})
+         ORDER BY a.marina_id, a.name`,
+        marinaIds,
+      ),
+      query<RowDataPacket[]>(
+        `SELECT sb.id, sb.marina_id, sb.anchorage_id, sb.seabed_type_id,
+                st.name as seabed_type_name, st.slug as seabed_type_slug,
+                st.holding_quality, sb.description, sb.depth_meters, sb.notes, sb.created_at
+         FROM seabeds sb
+         INNER JOIN seabed_types st ON st.id = sb.seabed_type_id
+         WHERE sb.marina_id IN (${inPlaceholders})
+         ORDER BY sb.marina_id, sb.id`,
+        marinaIds,
+      ),
+      query<RowDataPacket[]>(
+        `SELECT mo.id, mo.marina_id, mo.mooring_type_id, mt.name as mooring_type_name,
+                mo.mooring_number, mo.description, mo.max_boat_length_meters,
+                mo.max_boat_weight_tons, mo.depth_meters, mo.price_per_day,
+                mo.is_available, mo.latitude, mo.longitude, mo.updated_at
+         FROM moorings mo
+         INNER JOIN mooring_types mt ON mt.id = mo.mooring_type_id
+         WHERE mo.marina_id IN (${inPlaceholders})
+         ORDER BY mo.marina_id, mo.mooring_number`,
+        marinaIds,
+      ),
+      query<RowDataPacket[]>(
+        `SELECT p.id, p.marina_id, p.point_type_id, pt.name as point_type_name,
+                pt.slug as point_type_slug, p.name, p.description, p.latitude, p.longitude,
+                p.is_public, p.is_active, p.contact_info, p.operating_hours, p.updated_at
+         FROM points p
+         INNER JOIN point_types pt ON pt.id = p.point_type_id
+         WHERE p.marina_id IN (${inPlaceholders})
+         ORDER BY p.marina_id, p.name`,
+        marinaIds,
+      ),
+    ]);
+
+    const toNumber = (value: any) => {
+      if (value === null || value === undefined) return null;
+      return Number(value);
+    };
+
+    const toBool = (value: any) => Number(value) === 1;
+
+    const groupByMarina = (rows: RowDataPacket[]) => {
+      const grouped = new Map<number, RowDataPacket[]>();
+      rows.forEach((row) => {
+        const marinaId = Number(row.marina_id);
+        const existing = grouped.get(marinaId) || [];
+        existing.push(row);
+        grouped.set(marinaId, existing);
+      });
+      return grouped;
+    };
+
+    const slipsByMarina = groupByMarina(slips);
+    const featuresByMarina = groupByMarina(marinaFeatures);
+    const amenitiesByMarina = groupByMarina(amenities);
+    const anchoragesByMarina = groupByMarina(anchorages);
+    const seabedsByMarina = groupByMarina(seabeds);
+    const mooringsByMarina = groupByMarina(moorings);
+    const pointsByMarina = groupByMarina(points);
+
+    const buildPriceRange = (values: number[]) => {
+      if (!values.length) return { min: null, max: null };
+      return {
+        min: Math.min(...values),
+        max: Math.max(...values),
+      };
+    };
+
+    const response = marinas.map((marina) => {
+      const marinaId = Number(marina.id);
+
+      const marinaSlips = (slipsByMarina.get(marinaId) || []).map((row) => ({
+        id: Number(row.id),
+        slip_number: row.slip_number,
+        length_meters: toNumber(row.length_meters),
+        width_meters: toNumber(row.width_meters),
+        depth_meters: toNumber(row.depth_meters),
+        price_per_day: Number(row.price_per_day),
+        is_available: toBool(row.is_available),
+        is_reserved: toBool(row.is_reserved),
+        has_power: toBool(row.has_power),
+        has_water: toBool(row.has_water),
+        power_capacity_amps: toNumber(row.power_capacity_amps),
+        notes: row.notes,
+        updated_at: row.updated_at,
+      }));
+
+      const marinaFeaturesRow = (featuresByMarina.get(marinaId) || [])[0];
+      const marinaAmenities = (amenitiesByMarina.get(marinaId) || []).map(
+        (row) => ({
+          id: Number(row.id),
+          amenity_id: Number(row.amenity_id),
+          name: row.name,
+          slug: row.slug,
+          category: row.category,
+          icon: row.icon,
+        }),
+      );
+
+      const marinaAnchorages = (anchoragesByMarina.get(marinaId) || []).map(
+        (row) => ({
+          id: Number(row.id),
+          anchorage_type_id: Number(row.anchorage_type_id),
+          anchorage_type_name: row.anchorage_type_name,
+          name: row.name,
+          description: row.description,
+          latitude: toNumber(row.latitude),
+          longitude: toNumber(row.longitude),
+          max_depth_meters: toNumber(row.max_depth_meters),
+          min_depth_meters: toNumber(row.min_depth_meters),
+          capacity: toNumber(row.capacity),
+          price_per_day: toNumber(row.price_per_day),
+          protection_level: row.protection_level,
+          is_available: toBool(row.is_available),
+          updated_at: row.updated_at,
+        }),
+      );
+
+      const marinaSeabeds = (seabedsByMarina.get(marinaId) || []).map(
+        (row) => ({
+          id: Number(row.id),
+          anchorage_id: toNumber(row.anchorage_id),
+          seabed_type_id: Number(row.seabed_type_id),
+          seabed_type_name: row.seabed_type_name,
+          seabed_type_slug: row.seabed_type_slug,
+          holding_quality: row.holding_quality,
+          description: row.description,
+          depth_meters: toNumber(row.depth_meters),
+          notes: row.notes,
+          created_at: row.created_at,
+        }),
+      );
+
+      const marinaMoorings = (mooringsByMarina.get(marinaId) || []).map(
+        (row) => ({
+          id: Number(row.id),
+          mooring_type_id: Number(row.mooring_type_id),
+          mooring_type_name: row.mooring_type_name,
+          mooring_number: row.mooring_number,
+          description: row.description,
+          max_boat_length_meters: toNumber(row.max_boat_length_meters),
+          max_boat_weight_tons: toNumber(row.max_boat_weight_tons),
+          depth_meters: toNumber(row.depth_meters),
+          price_per_day: toNumber(row.price_per_day),
+          is_available: toBool(row.is_available),
+          latitude: toNumber(row.latitude),
+          longitude: toNumber(row.longitude),
+          updated_at: row.updated_at,
+        }),
+      );
+
+      const marinaPoints = (pointsByMarina.get(marinaId) || []).map((row) => ({
+        id: Number(row.id),
+        point_type_id: Number(row.point_type_id),
+        point_type_name: row.point_type_name,
+        point_type_slug: row.point_type_slug,
+        name: row.name,
+        description: row.description,
+        latitude: toNumber(row.latitude),
+        longitude: toNumber(row.longitude),
+        is_public: toBool(row.is_public),
+        is_active: toBool(row.is_active),
+        contact_info: row.contact_info,
+        operating_hours: row.operating_hours,
+        updated_at: row.updated_at,
+      }));
+
+      return {
+        id: marinaId,
+        name: marina.name,
+        city: marina.city,
+        state: marina.state,
+        country: marina.country,
+        is_active: Number(marina.is_active),
+        updated_at: marina.updated_at,
+        marina_price_per_day: Number(marina.marina_price_per_day || 0),
+        marina_features: marinaFeaturesRow
+          ? {
+              id: Number(marinaFeaturesRow.id),
+              has_fuel_dock: toBool(marinaFeaturesRow.has_fuel_dock),
+              has_pump_out: toBool(marinaFeaturesRow.has_pump_out),
+              has_haul_out: toBool(marinaFeaturesRow.has_haul_out),
+              has_boat_ramp: toBool(marinaFeaturesRow.has_boat_ramp),
+              has_dry_storage: toBool(marinaFeaturesRow.has_dry_storage),
+              has_live_aboard: toBool(marinaFeaturesRow.has_live_aboard),
+              max_haul_out_weight_tons: toNumber(
+                marinaFeaturesRow.max_haul_out_weight_tons,
+              ),
+              accepts_transients: toBool(marinaFeaturesRow.accepts_transients),
+              accepts_megayachts: toBool(marinaFeaturesRow.accepts_megayachts),
+              updated_at: marinaFeaturesRow.updated_at,
+            }
+          : null,
+        slips: marinaSlips,
+        amenities: marinaAmenities,
+        anchorages: marinaAnchorages,
+        seabeds: marinaSeabeds,
+        moorings: marinaMoorings,
+        points: marinaPoints,
+        pricing: {
+          slips: buildPriceRange(marinaSlips.map((item) => item.price_per_day)),
+          moorings: buildPriceRange(
+            marinaMoorings
+              .map((item) => item.price_per_day)
+              .filter((value): value is number => value !== null),
+          ),
+          anchorages: buildPriceRange(
+            marinaAnchorages
+              .map((item) => item.price_per_day)
+              .filter((value): value is number => value !== null),
+          ),
+        },
+      };
+    });
+
+    res.json({ success: true, marinas: response });
+  } catch (error) {
+    console.error("Error fetching marina management data:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch marina management data",
+    });
+  }
+};
+
+const hasHostMarinaAccess = async (hostId: number, marinaId: number) => {
+  const accessRows = await query<RowDataPacket[]>(
+    `SELECT 1 FROM hosts WHERE id = ? AND marina_id = ? LIMIT 1`,
+    [hostId, marinaId],
+  );
+  return accessRows.length > 0;
+};
+
+const parseOptionalNumber = (value: any) => {
+  if (value === null || value === undefined || value === "") return null;
+  return Number(value);
+};
+
+const parseOptionalBoolean = (value: any) => {
+  if (value === undefined) return undefined;
+  return value === true || value === 1 || value === "1";
+};
+
+const handleManageHostMarinaFeatures = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
+  try {
+    const hostId = Number((req as any).authHostId);
+    const { marinaId, features } = req.body;
+
+    if (!marinaId || !features) {
+      return res.status(400).json({
+        success: false,
+        error: "marinaId and features are required",
+      });
+    }
+
+    const hasAccess = await hasHostMarinaAccess(hostId, Number(marinaId));
+    if (!hasAccess) {
+      return res.status(403).json({ success: false, error: "Unauthorized" });
+    }
+
+    const existing = await query<RowDataPacket[]>(
+      `SELECT id FROM marina_features WHERE marina_id = ? LIMIT 1`,
+      [marinaId],
+    );
+
+    const hasFuelDock = parseOptionalBoolean(features.has_fuel_dock);
+    const hasPumpOut = parseOptionalBoolean(features.has_pump_out);
+    const hasHaulOut = parseOptionalBoolean(features.has_haul_out);
+    const hasBoatRamp = parseOptionalBoolean(features.has_boat_ramp);
+    const hasDryStorage = parseOptionalBoolean(features.has_dry_storage);
+    const hasLiveAboard = parseOptionalBoolean(features.has_live_aboard);
+    const acceptsTransients = parseOptionalBoolean(features.accepts_transients);
+    const acceptsMegayachts = parseOptionalBoolean(features.accepts_megayachts);
+    const maxHaulOutWeightTons = parseOptionalNumber(
+      features.max_haul_out_weight_tons,
+    );
+
+    if (existing.length > 0) {
+      await query(
+        `UPDATE marina_features
+         SET has_fuel_dock = COALESCE(?, has_fuel_dock),
+             has_pump_out = COALESCE(?, has_pump_out),
+             has_haul_out = COALESCE(?, has_haul_out),
+             has_boat_ramp = COALESCE(?, has_boat_ramp),
+             has_dry_storage = COALESCE(?, has_dry_storage),
+             has_live_aboard = COALESCE(?, has_live_aboard),
+             max_haul_out_weight_tons = COALESCE(?, max_haul_out_weight_tons),
+             accepts_transients = COALESCE(?, accepts_transients),
+             accepts_megayachts = COALESCE(?, accepts_megayachts),
+             updated_at = NOW()
+         WHERE marina_id = ?`,
+        [
+          hasFuelDock === undefined ? null : hasFuelDock,
+          hasPumpOut === undefined ? null : hasPumpOut,
+          hasHaulOut === undefined ? null : hasHaulOut,
+          hasBoatRamp === undefined ? null : hasBoatRamp,
+          hasDryStorage === undefined ? null : hasDryStorage,
+          hasLiveAboard === undefined ? null : hasLiveAboard,
+          maxHaulOutWeightTons,
+          acceptsTransients === undefined ? null : acceptsTransients,
+          acceptsMegayachts === undefined ? null : acceptsMegayachts,
+          marinaId,
+        ],
+      );
+    } else {
+      await query(
+        `INSERT INTO marina_features (
+          marina_id, has_fuel_dock, has_pump_out, has_haul_out, has_boat_ramp,
+          has_dry_storage, has_live_aboard, max_haul_out_weight_tons,
+          accepts_transients, accepts_megayachts, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+        [
+          marinaId,
+          hasFuelDock ?? false,
+          hasPumpOut ?? false,
+          hasHaulOut ?? false,
+          hasBoatRamp ?? false,
+          hasDryStorage ?? false,
+          hasLiveAboard ?? false,
+          maxHaulOutWeightTons,
+          acceptsTransients ?? true,
+          acceptsMegayachts ?? false,
+        ],
+      );
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error managing marina features:", error);
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to manage marina features" });
+  }
+};
+
+const handleManageHostAmenities = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
+  try {
+    const hostId = Number((req as any).authHostId);
+    const { marinaId, amenityIds } = req.body;
+
+    if (!marinaId || !Array.isArray(amenityIds)) {
+      return res.status(400).json({
+        success: false,
+        error: "marinaId and amenityIds array are required",
+      });
+    }
+
+    const hasAccess = await hasHostMarinaAccess(hostId, Number(marinaId));
+    if (!hasAccess) {
+      return res.status(403).json({ success: false, error: "Unauthorized" });
+    }
+
+    await query(`DELETE FROM marina_amenities WHERE marina_id = ?`, [marinaId]);
+
+    for (const amenityId of amenityIds) {
+      await query(
+        `INSERT INTO marina_amenities (marina_id, amenity_id, created_at)
+         VALUES (?, ?, NOW())`,
+        [marinaId, amenityId],
+      );
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error managing amenities:", error);
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to manage amenities" });
+  }
+};
+
+const handleManageHostSlips = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
+  try {
+    const hostId = Number((req as any).authHostId);
+    const { action, marinaId, slipId, slip } = req.body;
+
+    if (!action) {
+      return res
+        .status(400)
+        .json({ success: false, error: "action is required" });
+    }
+
+    if (action === "create") {
+      if (!marinaId || !slip) {
+        return res.status(400).json({
+          success: false,
+          error: "marinaId and slip are required",
+        });
+      }
+
+      const hasAccess = await hasHostMarinaAccess(hostId, Number(marinaId));
+      if (!hasAccess) {
+        return res.status(403).json({ success: false, error: "Unauthorized" });
+      }
+
+      const result = await query<ResultSetHeader>(
+        `INSERT INTO slips (
+          marina_id, slip_number, length_meters, width_meters, depth_meters,
+          price_per_day, is_available, is_reserved, has_power, has_water,
+          power_capacity_amps, notes, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+        [
+          marinaId,
+          slip.slip_number,
+          Number(slip.length_meters),
+          Number(slip.width_meters),
+          parseOptionalNumber(slip.depth_meters),
+          Number(slip.price_per_day),
+          parseOptionalBoolean(slip.is_available) ?? true,
+          parseOptionalBoolean(slip.is_reserved) ?? false,
+          parseOptionalBoolean(slip.has_power) ?? true,
+          parseOptionalBoolean(slip.has_water) ?? true,
+          parseOptionalNumber(slip.power_capacity_amps),
+          slip.notes || null,
+        ],
+      );
+
+      return res.status(201).json({ success: true, slipId: result.insertId });
+    }
+
+    if (!slipId) {
+      return res
+        .status(400)
+        .json({ success: false, error: "slipId is required" });
+    }
+
+    const slipRows = await query<RowDataPacket[]>(
+      `SELECT s.id FROM slips s
+       INNER JOIN hosts h ON h.marina_id = s.marina_id
+      WHERE s.id = ? AND h.id = ?
+       LIMIT 1`,
+      [slipId, hostId],
+    );
+
+    if (slipRows.length === 0) {
+      return res.status(403).json({ success: false, error: "Unauthorized" });
+    }
+
+    if (action === "update") {
+      await query(
+        `UPDATE slips
+         SET slip_number = COALESCE(?, slip_number),
+             length_meters = COALESCE(?, length_meters),
+             width_meters = COALESCE(?, width_meters),
+             depth_meters = COALESCE(?, depth_meters),
+             price_per_day = COALESCE(?, price_per_day),
+             is_available = COALESCE(?, is_available),
+             is_reserved = COALESCE(?, is_reserved),
+             has_power = COALESCE(?, has_power),
+             has_water = COALESCE(?, has_water),
+             power_capacity_amps = COALESCE(?, power_capacity_amps),
+             notes = COALESCE(?, notes),
+             updated_at = NOW()
+         WHERE id = ?`,
+        [
+          slip?.slip_number ?? null,
+          parseOptionalNumber(slip?.length_meters),
+          parseOptionalNumber(slip?.width_meters),
+          parseOptionalNumber(slip?.depth_meters),
+          parseOptionalNumber(slip?.price_per_day),
+          parseOptionalBoolean(slip?.is_available),
+          parseOptionalBoolean(slip?.is_reserved),
+          parseOptionalBoolean(slip?.has_power),
+          parseOptionalBoolean(slip?.has_water),
+          parseOptionalNumber(slip?.power_capacity_amps),
+          slip?.notes ?? null,
+          slipId,
+        ],
+      );
+      return res.json({ success: true });
+    }
+
+    if (action === "delete") {
+      await query(`DELETE FROM slips WHERE id = ?`, [slipId]);
+      return res.json({ success: true });
+    }
+
+    return res.status(400).json({ success: false, error: "Invalid action" });
+  } catch (error) {
+    console.error("Error managing slips:", error);
+    res.status(500).json({ success: false, error: "Failed to manage slips" });
+  }
+};
+
+const handleManageHostAnchorages = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
+  try {
+    const hostId = Number((req as any).authHostId);
+    const { action, marinaId, anchorageId, anchorage } = req.body;
+
+    if (!action) {
+      return res
+        .status(400)
+        .json({ success: false, error: "action is required" });
+    }
+
+    if (action === "create") {
+      if (!marinaId || !anchorage) {
+        return res.status(400).json({
+          success: false,
+          error: "marinaId and anchorage are required",
+        });
+      }
+
+      const hasAccess = await hasHostMarinaAccess(hostId, Number(marinaId));
+      if (!hasAccess) {
+        return res.status(403).json({ success: false, error: "Unauthorized" });
+      }
+
+      const result = await query<ResultSetHeader>(
+        `INSERT INTO anchorages (
+          marina_id, anchorage_type_id, name, description, latitude, longitude,
+          max_depth_meters, min_depth_meters, capacity, price_per_day,
+          protection_level, is_available, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+        [
+          marinaId,
+          Number(anchorage.anchorage_type_id),
+          anchorage.name,
+          anchorage.description || null,
+          Number(anchorage.latitude),
+          Number(anchorage.longitude),
+          parseOptionalNumber(anchorage.max_depth_meters),
+          parseOptionalNumber(anchorage.min_depth_meters),
+          parseOptionalNumber(anchorage.capacity),
+          parseOptionalNumber(anchorage.price_per_day),
+          anchorage.protection_level || "good",
+          parseOptionalBoolean(anchorage.is_available) ?? true,
+        ],
+      );
+
+      return res
+        .status(201)
+        .json({ success: true, anchorageId: result.insertId });
+    }
+
+    if (!anchorageId) {
+      return res.status(400).json({
+        success: false,
+        error: "anchorageId is required",
+      });
+    }
+
+    const rows = await query<RowDataPacket[]>(
+      `SELECT a.id FROM anchorages a
+       INNER JOIN hosts h ON h.marina_id = a.marina_id
+      WHERE a.id = ? AND h.id = ?
+       LIMIT 1`,
+      [anchorageId, hostId],
+    );
+
+    if (rows.length === 0) {
+      return res.status(403).json({ success: false, error: "Unauthorized" });
+    }
+
+    if (action === "update") {
+      await query(
+        `UPDATE anchorages
+         SET anchorage_type_id = COALESCE(?, anchorage_type_id),
+             name = COALESCE(?, name),
+             description = COALESCE(?, description),
+             latitude = COALESCE(?, latitude),
+             longitude = COALESCE(?, longitude),
+             max_depth_meters = COALESCE(?, max_depth_meters),
+             min_depth_meters = COALESCE(?, min_depth_meters),
+             capacity = COALESCE(?, capacity),
+             price_per_day = COALESCE(?, price_per_day),
+             protection_level = COALESCE(?, protection_level),
+             is_available = COALESCE(?, is_available),
+             updated_at = NOW()
+         WHERE id = ?`,
+        [
+          parseOptionalNumber(anchorage?.anchorage_type_id),
+          anchorage?.name ?? null,
+          anchorage?.description ?? null,
+          parseOptionalNumber(anchorage?.latitude),
+          parseOptionalNumber(anchorage?.longitude),
+          parseOptionalNumber(anchorage?.max_depth_meters),
+          parseOptionalNumber(anchorage?.min_depth_meters),
+          parseOptionalNumber(anchorage?.capacity),
+          parseOptionalNumber(anchorage?.price_per_day),
+          anchorage?.protection_level ?? null,
+          parseOptionalBoolean(anchorage?.is_available),
+          anchorageId,
+        ],
+      );
+      return res.json({ success: true });
+    }
+
+    if (action === "delete") {
+      await query(`DELETE FROM anchorages WHERE id = ?`, [anchorageId]);
+      return res.json({ success: true });
+    }
+
+    return res.status(400).json({ success: false, error: "Invalid action" });
+  } catch (error) {
+    console.error("Error managing anchorages:", error);
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to manage anchorages" });
+  }
+};
+
+const handleManageHostSeabeds = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
+  try {
+    const hostId = Number((req as any).authHostId);
+    const { action, marinaId, seabedId, seabed } = req.body;
+
+    if (!action) {
+      return res
+        .status(400)
+        .json({ success: false, error: "action is required" });
+    }
+
+    if (action === "create") {
+      if (!marinaId || !seabed) {
+        return res.status(400).json({
+          success: false,
+          error: "marinaId and seabed are required",
+        });
+      }
+
+      const hasAccess = await hasHostMarinaAccess(hostId, Number(marinaId));
+      if (!hasAccess) {
+        return res.status(403).json({ success: false, error: "Unauthorized" });
+      }
+
+      const result = await query<ResultSetHeader>(
+        `INSERT INTO seabeds (
+          marina_id, anchorage_id, seabed_type_id, description,
+          depth_meters, notes, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+        [
+          marinaId,
+          parseOptionalNumber(seabed.anchorage_id),
+          Number(seabed.seabed_type_id),
+          seabed.description || null,
+          parseOptionalNumber(seabed.depth_meters),
+          seabed.notes || null,
+        ],
+      );
+
+      return res.status(201).json({ success: true, seabedId: result.insertId });
+    }
+
+    if (!seabedId) {
+      return res
+        .status(400)
+        .json({ success: false, error: "seabedId is required" });
+    }
+
+    const rows = await query<RowDataPacket[]>(
+      `SELECT sb.id FROM seabeds sb
+       INNER JOIN hosts h ON h.marina_id = sb.marina_id
+      WHERE sb.id = ? AND h.id = ?
+       LIMIT 1`,
+      [seabedId, hostId],
+    );
+
+    if (rows.length === 0) {
+      return res.status(403).json({ success: false, error: "Unauthorized" });
+    }
+
+    if (action === "update") {
+      await query(
+        `UPDATE seabeds
+         SET anchorage_id = COALESCE(?, anchorage_id),
+             seabed_type_id = COALESCE(?, seabed_type_id),
+             description = COALESCE(?, description),
+             depth_meters = COALESCE(?, depth_meters),
+             notes = COALESCE(?, notes)
+         WHERE id = ?`,
+        [
+          parseOptionalNumber(seabed?.anchorage_id),
+          parseOptionalNumber(seabed?.seabed_type_id),
+          seabed?.description ?? null,
+          parseOptionalNumber(seabed?.depth_meters),
+          seabed?.notes ?? null,
+          seabedId,
+        ],
+      );
+      return res.json({ success: true });
+    }
+
+    if (action === "delete") {
+      await query(`DELETE FROM seabeds WHERE id = ?`, [seabedId]);
+      return res.json({ success: true });
+    }
+
+    return res.status(400).json({ success: false, error: "Invalid action" });
+  } catch (error) {
+    console.error("Error managing seabeds:", error);
+    res.status(500).json({ success: false, error: "Failed to manage seabeds" });
+  }
+};
+
+const handleManageHostMoorings = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
+  try {
+    const hostId = Number((req as any).authHostId);
+    const { action, marinaId, mooringId, mooring } = req.body;
+
+    if (!action) {
+      return res
+        .status(400)
+        .json({ success: false, error: "action is required" });
+    }
+
+    if (action === "create") {
+      if (!marinaId || !mooring) {
+        return res.status(400).json({
+          success: false,
+          error: "marinaId and mooring are required",
+        });
+      }
+
+      const hasAccess = await hasHostMarinaAccess(hostId, Number(marinaId));
+      if (!hasAccess) {
+        return res.status(403).json({ success: false, error: "Unauthorized" });
+      }
+
+      const result = await query<ResultSetHeader>(
+        `INSERT INTO moorings (
+          marina_id, mooring_type_id, mooring_number, description,
+          max_boat_length_meters, max_boat_weight_tons, depth_meters,
+          price_per_day, is_available, latitude, longitude, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+        [
+          marinaId,
+          Number(mooring.mooring_type_id),
+          mooring.mooring_number,
+          mooring.description || null,
+          Number(mooring.max_boat_length_meters),
+          parseOptionalNumber(mooring.max_boat_weight_tons),
+          parseOptionalNumber(mooring.depth_meters),
+          Number(mooring.price_per_day),
+          parseOptionalBoolean(mooring.is_available) ?? true,
+          parseOptionalNumber(mooring.latitude),
+          parseOptionalNumber(mooring.longitude),
+        ],
+      );
+
+      return res
+        .status(201)
+        .json({ success: true, mooringId: result.insertId });
+    }
+
+    if (!mooringId) {
+      return res
+        .status(400)
+        .json({ success: false, error: "mooringId is required" });
+    }
+
+    const rows = await query<RowDataPacket[]>(
+      `SELECT mo.id FROM moorings mo
+       INNER JOIN hosts h ON h.marina_id = mo.marina_id
+      WHERE mo.id = ? AND h.id = ?
+       LIMIT 1`,
+      [mooringId, hostId],
+    );
+
+    if (rows.length === 0) {
+      return res.status(403).json({ success: false, error: "Unauthorized" });
+    }
+
+    if (action === "update") {
+      await query(
+        `UPDATE moorings
+         SET mooring_type_id = COALESCE(?, mooring_type_id),
+             mooring_number = COALESCE(?, mooring_number),
+             description = COALESCE(?, description),
+             max_boat_length_meters = COALESCE(?, max_boat_length_meters),
+             max_boat_weight_tons = COALESCE(?, max_boat_weight_tons),
+             depth_meters = COALESCE(?, depth_meters),
+             price_per_day = COALESCE(?, price_per_day),
+             is_available = COALESCE(?, is_available),
+             latitude = COALESCE(?, latitude),
+             longitude = COALESCE(?, longitude),
+             updated_at = NOW()
+         WHERE id = ?`,
+        [
+          parseOptionalNumber(mooring?.mooring_type_id),
+          mooring?.mooring_number ?? null,
+          mooring?.description ?? null,
+          parseOptionalNumber(mooring?.max_boat_length_meters),
+          parseOptionalNumber(mooring?.max_boat_weight_tons),
+          parseOptionalNumber(mooring?.depth_meters),
+          parseOptionalNumber(mooring?.price_per_day),
+          parseOptionalBoolean(mooring?.is_available),
+          parseOptionalNumber(mooring?.latitude),
+          parseOptionalNumber(mooring?.longitude),
+          mooringId,
+        ],
+      );
+      return res.json({ success: true });
+    }
+
+    if (action === "delete") {
+      await query(`DELETE FROM moorings WHERE id = ?`, [mooringId]);
+      return res.json({ success: true });
+    }
+
+    return res.status(400).json({ success: false, error: "Invalid action" });
+  } catch (error) {
+    console.error("Error managing moorings:", error);
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to manage moorings" });
+  }
+};
+
+const handleManageHostPoints = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
+  try {
+    const hostId = Number((req as any).authHostId);
+    const { action, marinaId, pointId, point } = req.body;
+
+    if (!action) {
+      return res
+        .status(400)
+        .json({ success: false, error: "action is required" });
+    }
+
+    if (action === "create") {
+      if (!marinaId || !point) {
+        return res.status(400).json({
+          success: false,
+          error: "marinaId and point are required",
+        });
+      }
+
+      const hasAccess = await hasHostMarinaAccess(hostId, Number(marinaId));
+      if (!hasAccess) {
+        return res.status(403).json({ success: false, error: "Unauthorized" });
+      }
+
+      const result = await query<ResultSetHeader>(
+        `INSERT INTO points (
+          marina_id, point_type_id, name, description, latitude, longitude,
+          is_public, is_active, contact_info, operating_hours, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+        [
+          marinaId,
+          Number(point.point_type_id),
+          point.name,
+          point.description || null,
+          Number(point.latitude),
+          Number(point.longitude),
+          parseOptionalBoolean(point.is_public) ?? true,
+          parseOptionalBoolean(point.is_active) ?? true,
+          point.contact_info || null,
+          point.operating_hours || null,
+        ],
+      );
+
+      return res.status(201).json({ success: true, pointId: result.insertId });
+    }
+
+    if (!pointId) {
+      return res
+        .status(400)
+        .json({ success: false, error: "pointId is required" });
+    }
+
+    const rows = await query<RowDataPacket[]>(
+      `SELECT p.id FROM points p
+       INNER JOIN hosts h ON h.marina_id = p.marina_id
+      WHERE p.id = ? AND h.id = ?
+       LIMIT 1`,
+      [pointId, hostId],
+    );
+
+    if (rows.length === 0) {
+      return res.status(403).json({ success: false, error: "Unauthorized" });
+    }
+
+    if (action === "update") {
+      await query(
+        `UPDATE points
+         SET point_type_id = COALESCE(?, point_type_id),
+             name = COALESCE(?, name),
+             description = COALESCE(?, description),
+             latitude = COALESCE(?, latitude),
+             longitude = COALESCE(?, longitude),
+             is_public = COALESCE(?, is_public),
+             is_active = COALESCE(?, is_active),
+             contact_info = COALESCE(?, contact_info),
+             operating_hours = COALESCE(?, operating_hours),
+             updated_at = NOW()
+         WHERE id = ?`,
+        [
+          parseOptionalNumber(point?.point_type_id),
+          point?.name ?? null,
+          point?.description ?? null,
+          parseOptionalNumber(point?.latitude),
+          parseOptionalNumber(point?.longitude),
+          parseOptionalBoolean(point?.is_public),
+          parseOptionalBoolean(point?.is_active),
+          point?.contact_info ?? null,
+          point?.operating_hours ?? null,
+          pointId,
+        ],
+      );
+      return res.json({ success: true });
+    }
+
+    if (action === "delete") {
+      await query(`DELETE FROM points WHERE id = ?`, [pointId]);
+      return res.json({ success: true });
+    }
+
+    return res.status(400).json({ success: false, error: "Invalid action" });
+  } catch (error) {
+    console.error("Error managing points:", error);
+    res.status(500).json({ success: false, error: "Failed to manage points" });
+  }
+};
+
 /**
  * GET /api/host/guests
  * Get all guests who have booked at host's marinas
@@ -1837,7 +3050,8 @@ const handleHostGuests = async (req: AuthenticatedRequest, res: Response) => {
        FROM users u
        INNER JOIN bookings b ON u.id = b.user_id
        INNER JOIN marinas m ON b.marina_id = m.id
-       WHERE m.host_id = ?
+       INNER JOIN hosts h ON h.marina_id = m.id
+      WHERE h.id = ?
        GROUP BY u.id
        ORDER BY u.full_name`,
       [hostId],
@@ -1852,7 +3066,7 @@ const handleHostGuests = async (req: AuthenticatedRequest, res: Response) => {
 
 /**
  * GET /api/host/payments
- * Get payment information for host
+ * Get payment information for host with Stripe data
  */
 const handleHostPayments = async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -1860,29 +3074,149 @@ const handleHostPayments = async (req: AuthenticatedRequest, res: Response) => {
 
     const payments = await query<RowDataPacket[]>(
       `SELECT b.id as booking_id, b.total_amount, b.created_at as booking_date,
-       b.status, m.name as marina_name, u.full_name as guest_name
+       b.status, b.stripe_payment_intent_id, m.name as marina_name, u.full_name as guest_name,
+       u.email as guest_email
        FROM bookings b
        INNER JOIN marinas m ON b.marina_id = m.id
+       INNER JOIN hosts h ON h.marina_id = m.id
        INNER JOIN users u ON b.user_id = u.id
-       WHERE m.host_id = ? AND b.status IN ('confirmed', 'completed')
-       ORDER BY b.created_at DESC`,
+      WHERE h.id = ? AND b.status IN ('confirmed', 'completed')
+       ORDER BY b.created_at DESC
+       LIMIT 50`,
       [hostId],
+    );
+
+    // Enhance payments with Stripe data
+    const enhancedPayments = await Promise.all(
+      payments.map(async (payment) => {
+        if (payment.stripe_payment_intent_id) {
+          try {
+            const stripePayment = await stripe.paymentIntents.retrieve(
+              payment.stripe_payment_intent_id,
+            );
+            return {
+              ...payment,
+              stripe_status: stripePayment.status,
+              stripe_amount: stripePayment.amount / 100,
+              stripe_currency: stripePayment.currency,
+              stripe_created: new Date(stripePayment.created * 1000),
+              stripe_payment_method:
+                stripePayment.payment_method_types?.[0] || null,
+            };
+          } catch (stripeError) {
+            console.error(
+              `Error fetching Stripe payment ${payment.stripe_payment_intent_id}:`,
+              stripeError,
+            );
+            return {
+              ...payment,
+              stripe_status: "error",
+              stripe_error: "Unable to fetch from Stripe",
+            };
+          }
+        }
+        return {
+          ...payment,
+          stripe_status: "no_payment_intent",
+        };
+      }),
     );
 
     const totals = await query<RowDataPacket[]>(
       `SELECT 
        SUM(CASE WHEN b.status = 'confirmed' THEN b.total_amount ELSE 0 END) as pending_payout,
-       SUM(CASE WHEN b.status = 'completed' THEN b.total_amount ELSE 0 END) as total_earned
+       SUM(CASE WHEN b.status = 'completed' THEN b.total_amount ELSE 0 END) as total_earned,
+       COUNT(CASE WHEN b.status IN ('confirmed', 'completed') THEN 1 END) as total_transactions
        FROM bookings b
        INNER JOIN marinas m ON b.marina_id = m.id
-       WHERE m.host_id = ?`,
+       INNER JOIN hosts h ON h.marina_id = m.id
+      WHERE h.id = ?`,
       [hostId],
     );
 
-    res.json({ success: true, payments, totals: totals[0] || {} });
+    res.json({
+      success: true,
+      payments: enhancedPayments,
+      totals: totals[0] || {},
+    });
   } catch (error) {
     console.error("Error fetching payments:", error);
     res.status(500).json({ success: false, error: "Failed to fetch payments" });
+  }
+};
+
+/**
+ * GET /api/host/dashboard/stats
+ * Get dashboard statistics for host
+ */
+const handleHostDashboardStats = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
+  try {
+    const hostId = (req as any).authHostId;
+
+    // Get total bookings and revenue (only for marinas the host manages)
+    const bookingStats = await query<RowDataPacket[]>(
+      `SELECT 
+       COUNT(*) as totalBookings,
+       SUM(total_amount) as totalRevenue,
+       SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END) as activeBookings
+       FROM bookings b
+       INNER JOIN marinas m ON b.marina_id = m.id
+       INNER JOIN hosts h ON h.marina_id = m.id
+      WHERE h.id = ?`,
+      [hostId],
+    );
+
+    // Get total marinas managed by this host
+    const marinaStats = await query<RowDataPacket[]>(
+      `SELECT COUNT(DISTINCT h.marina_id) as totalMarinas 
+       FROM hosts h 
+      WHERE h.id = ?`,
+      [hostId],
+    );
+
+    // Get recent bookings (only for marinas the host manages)
+    const recentBookings = await query<RowDataPacket[]>(
+      `SELECT b.id, b.total_amount, b.status, b.created_at,
+       m.name as marina_name, u.full_name as guest_name
+       FROM bookings b
+       INNER JOIN marinas m ON b.marina_id = m.id
+       INNER JOIN hosts h ON h.marina_id = m.id
+       INNER JOIN users u ON b.user_id = u.id
+      WHERE h.id = ?
+       ORDER BY b.created_at DESC
+       LIMIT 10`,
+      [hostId],
+    );
+
+    // Get bookings by status (only for marinas the host manages)
+    const bookingsByStatus = await query<RowDataPacket[]>(
+      `SELECT b.status, COUNT(*) as count
+       FROM bookings b
+       INNER JOIN marinas m ON b.marina_id = m.id
+       INNER JOIN hosts h ON h.marina_id = m.id
+      WHERE h.id = ?
+       GROUP BY b.status`,
+      [hostId],
+    );
+
+    const stats = {
+      totalBookings: bookingStats[0]?.totalBookings || 0,
+      totalRevenue: bookingStats[0]?.totalRevenue || 0,
+      activeBookings: bookingStats[0]?.activeBookings || 0,
+      totalMarinas: marinaStats[0]?.totalMarinas || 0,
+      recentBookings,
+      bookingsByStatus,
+    };
+
+    res.json(stats);
+  } catch (error) {
+    console.error("Error fetching dashboard stats:", error);
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to fetch dashboard stats" });
   }
 };
 
@@ -1903,7 +3237,8 @@ const handleHostPreCheckoutSteps = async (
       (SELECT COUNT(*) FROM pre_checkout_step_fields WHERE step_id = pcs.id) as field_count
       FROM marina_pre_checkout_steps pcs
       INNER JOIN marinas m ON pcs.marina_id = m.id
-      WHERE m.host_id = ?
+      INNER JOIN hosts h ON h.marina_id = m.id
+      WHERE h.id = ?
     `;
     const params: any[] = [hostId];
 
@@ -1966,8 +3301,9 @@ const handleHostSubmissions = async (
       INNER JOIN marina_pre_checkout_steps pcs ON gss.step_id = pcs.id
       INNER JOIN bookings b ON gss.booking_id = b.id
       INNER JOIN marinas m ON b.marina_id = m.id
+      INNER JOIN hosts h ON h.marina_id = m.id
       INNER JOIN users u ON gss.user_id = u.id
-      WHERE m.host_id = ?
+      WHERE h.id = ?
     `;
     const params: any[] = [hostId];
 
@@ -2004,7 +3340,8 @@ const handleApproveBooking = async (
     const bookings = await query<RowDataPacket[]>(
       `SELECT b.id FROM bookings b
        INNER JOIN marinas m ON b.marina_id = m.id
-       WHERE b.id = ? AND m.host_id = ?`,
+       INNER JOIN hosts h ON h.marina_id = m.id
+      WHERE b.id = ? AND h.id = ?`,
       [bookingId, hostId],
     );
 
@@ -2052,7 +3389,8 @@ const handleHostVisitorAnalytics = async (
        COUNT(DISTINCT session_id) as unique_visitors
        FROM visitor_page_views vp
        INNER JOIN marinas m ON vp.marina_id = m.id
-       WHERE m.host_id = ? AND vp.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+       INNER JOIN hosts h ON h.marina_id = m.id
+      WHERE h.id = ? AND vp.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
        GROUP BY DATE(created_at)
        ORDER BY date DESC`,
       [hostId, parseInt(period as string)],
@@ -2064,6 +3402,664 @@ const handleHostVisitorAnalytics = async (
     res
       .status(500)
       .json({ success: false, error: "Failed to fetch analytics" });
+  }
+};
+
+// =====================================================
+// HOST MANAGEMENT ROUTES (Admin functionality)
+// =====================================================
+
+/**
+ * GET /api/host/manage-hosts
+ * Get all hosts assigned to this marina + available hosts to assign
+ */
+const handleGetManagedHosts = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
+  try {
+    const hostId = (req as any).authHostId;
+    const { marinaId } = req.query;
+
+    // Get marina with current hosts (if marinaId provided)
+    let assignedHosts = [];
+    let marinaData = null;
+    if (marinaId) {
+      const marinas = await query<RowDataPacket[]>(
+        `SELECT m.name as marina_name
+         FROM marinas m
+         INNER JOIN hosts h ON h.marina_id = m.id
+         WHERE m.id = ? AND h.id = ? AND h.role IN ('primary', 'manager')`,
+        [marinaId, hostId],
+      );
+
+      if (marinas.length === 0) {
+        return res.status(403).json({
+          success: false,
+          error: "Unauthorized to manage hosts for this marina",
+        });
+      }
+
+      marinaData = marinas[0];
+
+      // Get all hosts for this marina
+      assignedHosts = await query<RowDataPacket[]>(
+        `SELECT h.id, h.full_name, h.email, h.phone, h.created_at, h.role,
+         CASE WHEN h.role = 'primary' THEN true ELSE false END as is_primary
+         FROM hosts h
+         WHERE h.marina_id = ? AND h.is_active = 1
+         ORDER BY h.role = 'primary' DESC, h.full_name ASC`,
+        [marinaId],
+      );
+    }
+
+    // Get all available hosts that could be assigned
+    const assignedHostIds = assignedHosts.map((h) => h.id);
+    const availableHosts = await query<RowDataPacket[]>(
+      `SELECT h.id, h.full_name, h.email, h.phone, h.created_at,
+       COUNT(h2.id) as marina_count
+       FROM hosts h
+       LEFT JOIN hosts h2 ON h.id = h2.id AND h2.marina_id IS NOT NULL
+       WHERE h.is_active = 1 AND (h.marina_id IS NULL OR h.marina_id != ?)
+       ${assignedHostIds.length > 0 ? `AND h.id NOT IN (${assignedHostIds.map(() => "?").join(",")})` : ""}
+       GROUP BY h.id
+       ORDER BY h.created_at DESC`,
+      marinaId ? [marinaId, ...assignedHostIds] : assignedHostIds,
+    );
+
+    res.json({
+      success: true,
+      assignedHosts,
+      availableHosts,
+      marinaId: marinaId || null,
+      marinaName: marinaData?.marina_name || null,
+    });
+  } catch (error) {
+    console.error("Error fetching managed hosts:", error);
+    res.status(500).json({ success: false, error: "Failed to fetch hosts" });
+  }
+};
+
+/**
+ * POST /api/host/assign-host
+ * Assign a host to a marina
+ */
+const handleAssignHost = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const assignerHostId = (req as any).authHostId;
+    const { marinaId, hostId } = req.body;
+
+    if (!marinaId || !hostId) {
+      return res.status(400).json({
+        success: false,
+        error: "Marina ID and Host ID are required",
+      });
+    }
+
+    // Verify the assigner owns this marina
+    const marinaCheck = await query<RowDataPacket[]>(
+      `SELECT id FROM marinas WHERE id = ? AND host_id = ?`,
+      [marinaId, assignerHostId],
+    );
+
+    if (marinaCheck.length === 0) {
+      return res.status(403).json({
+        success: false,
+        error: "Unauthorized to assign hosts to this marina",
+      });
+    }
+
+    // Check if host is already assigned to this marina
+    const existingAssignment = await query<RowDataPacket[]>(
+      `SELECT id FROM hosts WHERE id = ? AND marina_id = ?`,
+      [hostId, marinaId],
+    );
+
+    if (existingAssignment.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Host is already assigned to this marina",
+      });
+    }
+
+    // Assign the host to the marina
+    await query(
+      `UPDATE hosts SET marina_id = ?, role = 'manager' WHERE id = ?`,
+      [marinaId, hostId],
+    );
+
+    res.json({ success: true, message: "Host assigned successfully" });
+  } catch (error) {
+    console.error("Error assigning host:", error);
+    res.status(500).json({ success: false, error: "Failed to assign host" });
+  }
+};
+
+/**
+ * PUT /api/host/update-host-role
+ * Update a host's role at a marina (now just primary vs additional)
+ */
+const handleUpdateHostRole = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
+  try {
+    const assignerHostId = (req as any).authHostId;
+    const { marinaId, hostId, makePrimary = false } = req.body;
+
+    if (!marinaId || !hostId) {
+      return res.status(400).json({
+        success: false,
+        error: "Marina ID and Host ID are required",
+      });
+    }
+
+    // Verify the assigner owns this marina
+    const marinaCheck = await query<RowDataPacket[]>(
+      `SELECT id FROM marinas WHERE id = ? AND host_id = ?`,
+      [marinaId, assignerHostId],
+    );
+
+    if (marinaCheck.length === 0) {
+      return res.status(403).json({
+        success: false,
+        error: "Unauthorized to update this host assignment",
+      });
+    }
+
+    if (makePrimary) {
+      // First, demote current primary host to manager
+      await query(
+        `UPDATE hosts SET role = 'manager' WHERE marina_id = ? AND role = 'primary'`,
+        [marinaId],
+      );
+
+      // Then promote the new host to primary
+      await query(
+        `UPDATE hosts SET role = 'primary' WHERE id = ? AND marina_id = ?`,
+        [hostId, marinaId],
+      );
+    }
+
+    res.json({ success: true, message: "Host role updated successfully" });
+  } catch (error) {
+    console.error("Error updating host role:", error);
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to update host role" });
+  }
+};
+
+/**
+ * DELETE /api/host/remove-host
+ * Remove a host from a marina
+ */
+const handleRemoveHost = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const assignerHostId = (req as any).authHostId;
+    const { marinaId, hostId } = req.body;
+
+    if (!marinaId || !hostId) {
+      return res.status(400).json({
+        success: false,
+        error: "Marina ID and Host ID are required",
+      });
+    }
+
+    // Verify the assigner owns this marina
+    const marinaCheck = await query<RowDataPacket[]>(
+      `SELECT id FROM marinas WHERE id = ? AND host_id = ?`,
+      [marinaId, assignerHostId],
+    );
+
+    if (marinaCheck.length === 0) {
+      return res.status(403).json({
+        success: false,
+        error: "Unauthorized to remove host from this marina",
+      });
+    }
+
+    // Check if host is assigned to this marina
+    const hostCheck = await query<RowDataPacket[]>(
+      `SELECT id, role FROM hosts WHERE id = ? AND marina_id = ?`,
+      [hostId, marinaId],
+    );
+
+    if (hostCheck.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Host is not assigned to this marina",
+      });
+    }
+
+    const host = hostCheck[0];
+
+    // Can't remove primary host
+    if (host.role === "primary") {
+      return res.status(400).json({
+        success: false,
+        error: "Cannot remove primary host. Transfer ownership first.",
+      });
+    }
+
+    // Remove host from marina
+    await query(
+      `UPDATE hosts SET marina_id = NULL, role = 'manager' WHERE id = ?`,
+      [hostId],
+    );
+
+    res.json({ success: true, message: "Host removed successfully" });
+  } catch (error) {
+    console.error("Error removing host:", error);
+    res.status(500).json({ success: false, error: "Failed to remove host" });
+  }
+};
+
+/**
+ * POST /api/host/create-host
+ * Create a new host user (admin functionality)
+ */
+const handleCreateHost = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const creatorHostId = (req as any).authHostId;
+    const { email, fullName, phone, phoneCode, countryCode } = req.body;
+
+    if (!email || !fullName) {
+      return res.status(400).json({
+        success: false,
+        error: "Email and full name are required",
+      });
+    }
+
+    // Check if host already exists
+    const existingHost = await query<RowDataPacket[]>(
+      "SELECT id FROM hosts WHERE email = ?",
+      [email],
+    );
+
+    if (existingHost.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: "A host with this email already exists",
+      });
+    }
+
+    // Create the new host
+    const result = await query<ResultSetHeader>(
+      `INSERT INTO hosts (email, full_name, phone, phone_code, country_code, is_active, email_verified)
+       VALUES (?, ?, ?, ?, ?, 'host', 1, 0)`,
+      [email, fullName, phone || null, phoneCode || null, countryCode || null],
+    );
+
+    const newHostId = result.insertId;
+
+    res.json({
+      success: true,
+      message: "Host created successfully",
+      hostId: newHostId,
+      host: {
+        id: newHostId,
+        email,
+        full_name: fullName,
+        phone,
+        user_type: "host",
+      },
+    });
+  } catch (error) {
+    console.error("Error creating host:", error);
+    res.status(500).json({ success: false, error: "Failed to create host" });
+  }
+};
+
+// =====================================================
+// ADMIN HOST MANAGEMENT HANDLERS (New Structure)
+// =====================================================
+
+/**
+ * GET /api/admin/hosts
+ * Get managed hosts with new admin structure
+ */
+const handleAdminGetHosts = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
+  try {
+    const hostId = (req as any).authHostId;
+    const { marinaId } = req.query;
+
+    // Get marina with current hosts (if marinaId provided)
+    let assignedHosts = [];
+    let marinaData = null;
+    if (marinaId) {
+      const marinas = await query<RowDataPacket[]>(
+        `SELECT m.name as marina_name
+         FROM marinas m
+         INNER JOIN hosts h ON h.marina_id = m.id
+         WHERE m.id = ? AND h.id = ? AND h.role IN ('primary', 'manager')`,
+        [marinaId, hostId],
+      );
+
+      if (marinas.length === 0) {
+        return res.status(403).json({
+          success: false,
+          error: "Unauthorized to manage hosts for this marina",
+        });
+      }
+
+      marinaData = marinas[0];
+
+      // Get all hosts assigned to this marina
+      assignedHosts = await query<RowDataPacket[]>(
+        `SELECT h.id, h.full_name, h.email, h.phone, h.created_at, h.marina_id, h.role, h.is_active,
+         h.created_at as assigned_at
+         FROM hosts h
+         WHERE h.marina_id = ?
+         ORDER BY h.role = 'primary' DESC, h.full_name ASC`,
+        [marinaId],
+      );
+    }
+
+    // Get all available hosts that could be assigned
+    const assignedHostIds = assignedHosts.map((h) => h.id);
+    const availableHosts = await query<RowDataPacket[]>(
+      `SELECT h.id, h.full_name, h.email, h.phone, h.created_at,
+       COUNT(CASE WHEN h2.marina_id IS NOT NULL THEN 1 END) as marina_count
+       FROM hosts h
+       LEFT JOIN hosts h2 ON h.id = h2.id
+       WHERE h.is_active = 1 AND (h.marina_id IS NULL ${marinaId ? `OR h.marina_id != ?` : ""})
+       ${assignedHostIds.length > 0 ? `AND h.id NOT IN (${assignedHostIds.map(() => "?").join(",")})` : ""}
+       GROUP BY h.id, h.full_name, h.email, h.phone, h.created_at
+       ORDER BY h.created_at DESC`,
+      marinaId ? [marinaId, ...assignedHostIds] : assignedHostIds,
+    );
+
+    res.json({
+      success: true,
+      assignedHosts,
+      availableHosts,
+      marinaId: marinaId || null,
+      marinaName: marinaData?.marina_name || null,
+    });
+  } catch (error) {
+    console.error("Error fetching admin hosts:", error);
+    res.status(500).json({ success: false, error: "Failed to fetch hosts" });
+  }
+};
+
+/**
+ * POST /api/admin/hosts
+ * Create a new host user
+ */
+const handleAdminCreateHost = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
+  try {
+    const creatorHostId = (req as any).authHostId;
+    const { email, fullName, phone } = req.body;
+
+    if (!email || !fullName) {
+      return res.status(400).json({
+        success: false,
+        error: "Email and full name are required",
+      });
+    }
+
+    // Check if host already exists
+    const existingHost = await query<RowDataPacket[]>(
+      "SELECT id FROM hosts WHERE email = ?",
+      [email],
+    );
+
+    if (existingHost.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: "A host with this email already exists",
+      });
+    }
+
+    // Create the new host
+    const result = await query<ResultSetHeader>(
+      `INSERT INTO hosts (email, full_name, phone, is_active, email_verified)
+       VALUES (?, ?, ?, 1, 0)`,
+      [email, fullName, phone || null],
+    );
+
+    const newHostId = result.insertId;
+
+    res.json({
+      success: true,
+      message: "Host created successfully",
+      host: {
+        id: newHostId,
+        email,
+        full_name: fullName,
+        phone,
+        created_at: new Date().toISOString(),
+        marina_count: 0,
+      },
+    });
+  } catch (error) {
+    console.error("Error creating admin host:", error);
+    res.status(500).json({ success: false, error: "Failed to create host" });
+  }
+};
+
+/**
+ * POST /api/admin/hosts/assign
+ * Assign a host to a marina
+ */
+const handleAdminAssignHost = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
+  try {
+    const assignerHostId = (req as any).authHostId;
+    const { marinaId, hostId, role = "manager" } = req.body;
+
+    if (!marinaId || !hostId) {
+      return res.status(400).json({
+        success: false,
+        error: "Marina ID and Host ID are required",
+      });
+    }
+
+    // Verify the assigner owns this marina
+    const marinaCheck = await query<RowDataPacket[]>(
+      `SELECT id FROM marinas WHERE id = ? AND host_id = ?`,
+      [marinaId, assignerHostId],
+    );
+
+    if (marinaCheck.length === 0) {
+      return res.status(403).json({
+        success: false,
+        error: "Unauthorized to assign hosts to this marina",
+      });
+    }
+
+    // Check if host is already assigned to this marina
+    const existingAssignment = await query<RowDataPacket[]>(
+      `SELECT id FROM hosts WHERE id = ? AND marina_id = ?`,
+      [hostId, marinaId],
+    );
+
+    if (existingAssignment.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Host is already assigned to this marina",
+      });
+    }
+
+    // Assign the host to the marina
+    await query(`UPDATE hosts SET marina_id = ?, role = ? WHERE id = ?`, [
+      marinaId,
+      role,
+      hostId,
+    ]);
+
+    res.json({
+      success: true,
+      assignment: {
+        hostId,
+        marinaId,
+        role,
+        assignedAt: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error("Error assigning admin host:", error);
+    res.status(500).json({ success: false, error: "Failed to assign host" });
+  }
+};
+
+/**
+ * PUT /api/admin/hosts/:hostId/role
+ * Update a host's role at a marina
+ */
+const handleAdminUpdateHostRole = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
+  try {
+    const assignerHostId = (req as any).authHostId;
+    const { hostId } = req.params;
+    const { role } = req.body;
+
+    if (!hostId || !role) {
+      return res.status(400).json({
+        success: false,
+        error: "Host ID and role are required",
+      });
+    }
+
+    // Get the host's current marina assignment
+    const hostCheck = await query<RowDataPacket[]>(
+      `SELECT marina_id FROM hosts WHERE id = ?`,
+      [hostId],
+    );
+
+    if (hostCheck.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: "Host not found",
+      });
+    }
+
+    const marinaId = hostCheck[0].marina_id;
+
+    if (!marinaId) {
+      return res.status(400).json({
+        success: false,
+        error: "Host is not assigned to any marina",
+      });
+    }
+
+    // Verify the assigner owns this marina
+    const marinaCheck = await query<RowDataPacket[]>(
+      `SELECT id FROM marinas WHERE id = ? AND host_id = ?`,
+      [marinaId, assignerHostId],
+    );
+
+    if (marinaCheck.length === 0) {
+      return res.status(403).json({
+        success: false,
+        error: "Unauthorized to update this host's role",
+      });
+    }
+
+    if (role === "primary") {
+      // First, demote current primary host to manager
+      await query(
+        `UPDATE hosts SET role = 'manager' WHERE marina_id = ? AND role = 'primary'`,
+        [marinaId],
+      );
+    }
+
+    // Update the host's role
+    await query(`UPDATE hosts SET role = ? WHERE id = ?`, [role, hostId]);
+
+    res.json({ success: true, message: "Host role updated successfully" });
+  } catch (error) {
+    console.error("Error updating admin host role:", error);
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to update host role" });
+  }
+};
+
+/**
+ * DELETE /api/admin/hosts/:hostId
+ * Remove a host from their marina assignment
+ */
+const handleAdminRemoveHost = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
+  try {
+    const assignerHostId = (req as any).authHostId;
+    const { hostId } = req.params;
+
+    if (!hostId) {
+      return res.status(400).json({
+        success: false,
+        error: "Host ID is required",
+      });
+    }
+
+    // Get the host's current marina assignment
+    const hostCheck = await query<RowDataPacket[]>(
+      `SELECT marina_id, role FROM hosts WHERE id = ?`,
+      [hostId],
+    );
+
+    if (hostCheck.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: "Host not found",
+      });
+    }
+
+    const host = hostCheck[0];
+    const marinaId = host.marina_id;
+
+    if (!marinaId) {
+      return res.status(400).json({
+        success: false,
+        error: "Host is not assigned to any marina",
+      });
+    }
+
+    // Verify the assigner owns this marina
+    const marinaCheck = await query<RowDataPacket[]>(
+      `SELECT id FROM marinas WHERE id = ? AND host_id = ?`,
+      [marinaId, assignerHostId],
+    );
+
+    if (marinaCheck.length === 0) {
+      return res.status(403).json({
+        success: false,
+        error: "Unauthorized to remove host from this marina",
+      });
+    }
+
+    // Can't remove primary host
+    if (host.role === "primary") {
+      return res.status(400).json({
+        success: false,
+        error: "Cannot remove primary host. Transfer ownership first.",
+      });
+    }
+
+    // Remove host from marina (set marina_id to NULL)
+    await query(
+      `UPDATE hosts SET marina_id = NULL, role = 'manager' WHERE id = ?`,
+      [hostId],
+    );
+
+    res.json({ success: true, message: "Host removed successfully" });
+  } catch (error) {
+    console.error("Error removing admin host:", error);
+    res.status(500).json({ success: false, error: "Failed to remove host" });
   }
 };
 
@@ -2974,12 +4970,38 @@ const handleMarinaFilters = async (req: Request, res: Response) => {
  */
 const handleMarinaAvailability = async (req: Request, res: Response) => {
   try {
-    const { marinaId } = req.query;
+    const { marinaId, checkIn, checkOut } = req.query;
 
     if (!marinaId) {
       return res
         .status(400)
         .json({ success: false, error: "Marina ID required" });
+    }
+
+    if ((checkIn && !checkOut) || (!checkIn && checkOut)) {
+      return res.status(400).json({
+        success: false,
+        error:
+          "Both checkIn and checkOut are required when filtering availability",
+      });
+    }
+
+    const hasDateRange = Boolean(checkIn && checkOut);
+
+    if (hasDateRange) {
+      const checkInDate = new Date(String(checkIn));
+      const checkOutDate = new Date(String(checkOut));
+
+      if (
+        Number.isNaN(checkInDate.getTime()) ||
+        Number.isNaN(checkOutDate.getTime()) ||
+        checkOutDate <= checkInDate
+      ) {
+        return res.status(400).json({
+          success: false,
+          error: "Invalid checkIn/checkOut range",
+        });
+      }
     }
 
     const bookedDates = await query<RowDataPacket[]>(
@@ -2990,6 +5012,7 @@ const handleMarinaAvailability = async (req: Request, res: Response) => {
 
     const blockedDates = await query<RowDataPacket[]>(
       `SELECT blocked_date as date, reason, slip_id as slipId,
+       start_time as startTime, end_time as endTime, is_all_day as isAllDay,
        s.slip_number as slipNumber
        FROM blocked_dates bd
        LEFT JOIN slips s ON bd.slip_id = s.id
@@ -2997,12 +5020,47 @@ const handleMarinaAvailability = async (req: Request, res: Response) => {
       [marinaId],
     );
 
-    const availableSlips = await query<RowDataPacket[]>(
-      `SELECT id, slip_number as slipNumber, length_meters as length,
-       width_meters as width, depth_meters as depth, price_per_day as pricePerDay
-       FROM slips WHERE marina_id = ? AND is_available = TRUE`,
-      [marinaId],
-    );
+    const availableSlips = hasDateRange
+      ? await query<RowDataPacket[]>(
+          `SELECT s.id, s.slip_number as slipNumber, s.length_meters as length,
+           s.width_meters as width, s.depth_meters as depth, s.price_per_day as pricePerDay
+           FROM slips s
+           WHERE s.marina_id = ?
+             AND s.is_available = TRUE
+             AND NOT EXISTS (
+               SELECT 1 FROM bookings b
+               WHERE b.slip_id = s.id
+                 AND b.status IN ('pending', 'confirmed')
+                 AND (
+                   (b.check_in_date <= ? AND b.check_out_date >= ?)
+                   OR (b.check_in_date <= ? AND b.check_out_date >= ?)
+                   OR (b.check_in_date >= ? AND b.check_out_date <= ?)
+                 )
+             )
+             AND NOT EXISTS (
+               SELECT 1 FROM blocked_dates bd
+               WHERE bd.marina_id = s.marina_id
+                 AND (bd.slip_id = s.id OR bd.slip_id IS NULL)
+                 AND bd.blocked_date BETWEEN ? AND ?
+             )`,
+          [
+            marinaId,
+            checkIn,
+            checkIn,
+            checkOut,
+            checkOut,
+            checkIn,
+            checkOut,
+            checkIn,
+            checkOut,
+          ],
+        )
+      : await query<RowDataPacket[]>(
+          `SELECT id, slip_number as slipNumber, length_meters as length,
+           width_meters as width, depth_meters as depth, price_per_day as pricePerDay
+           FROM slips WHERE marina_id = ? AND is_available = TRUE`,
+          [marinaId],
+        );
 
     res.json({
       success: true,
@@ -4539,10 +6597,65 @@ function createServer() {
   // Host protected routes
   expressApp.get("/api/host/me", verifyHostSession, handleHostMe);
   expressApp.get("/api/host/bookings", verifyHostSession, handleHostBookings);
+  expressApp.get(
+    "/api/host/blocked-dates",
+    verifyHostSession,
+    handleHostBlockedDates,
+  );
+  expressApp.post(
+    "/api/host/blocked-dates",
+    verifyHostSession,
+    handleCreateHostBlockedDate,
+  );
   expressApp.get("/api/host/marinas", verifyHostSession, handleHostMarinas);
   expressApp.get("/api/host/slips", verifyHostSession, handleHostSlips);
+  expressApp.get(
+    "/api/host/marina-management",
+    verifyHostSession,
+    handleHostMarinaManagement,
+  );
+  expressApp.post(
+    "/api/host/marina-management/slips",
+    verifyHostSession,
+    handleManageHostSlips,
+  );
+  expressApp.post(
+    "/api/host/marina-management/marina-features",
+    verifyHostSession,
+    handleManageHostMarinaFeatures,
+  );
+  expressApp.post(
+    "/api/host/marina-management/amenities",
+    verifyHostSession,
+    handleManageHostAmenities,
+  );
+  expressApp.post(
+    "/api/host/marina-management/anchorages",
+    verifyHostSession,
+    handleManageHostAnchorages,
+  );
+  expressApp.post(
+    "/api/host/marina-management/seabeds",
+    verifyHostSession,
+    handleManageHostSeabeds,
+  );
+  expressApp.post(
+    "/api/host/marina-management/moorings",
+    verifyHostSession,
+    handleManageHostMoorings,
+  );
+  expressApp.post(
+    "/api/host/marina-management/points",
+    verifyHostSession,
+    handleManageHostPoints,
+  );
   expressApp.get("/api/host/guests", verifyHostSession, handleHostGuests);
   expressApp.get("/api/host/payments", verifyHostSession, handleHostPayments);
+  expressApp.get(
+    "/api/host/dashboard/stats",
+    verifyHostSession,
+    handleHostDashboardStats,
+  );
   expressApp.get(
     "/api/host/pre-checkout-steps",
     verifyHostSession,
@@ -4567,6 +6680,44 @@ function createServer() {
     "/api/host/visitor-analytics",
     verifyHostSession,
     handleHostVisitorAnalytics,
+  );
+
+  // Host management routes (admin functionality)
+  expressApp.get(
+    "/api/host/manage-hosts",
+    verifyHostSession,
+    handleGetManagedHosts,
+  );
+  expressApp.post("/api/host/assign-host", verifyHostSession, handleAssignHost);
+  expressApp.put(
+    "/api/host/update-host-role",
+    verifyHostSession,
+    handleUpdateHostRole,
+  );
+  expressApp.delete(
+    "/api/host/remove-host",
+    verifyHostSession,
+    handleRemoveHost,
+  );
+  expressApp.post("/api/host/create-host", verifyHostSession, handleCreateHost);
+
+  // New Admin Host Management routes
+  expressApp.get("/api/admin/hosts", verifyHostSession, handleAdminGetHosts);
+  expressApp.post("/api/admin/hosts", verifyHostSession, handleAdminCreateHost);
+  expressApp.post(
+    "/api/admin/hosts/assign",
+    verifyHostSession,
+    handleAdminAssignHost,
+  );
+  expressApp.put(
+    "/api/admin/hosts/:hostId/role",
+    verifyHostSession,
+    handleAdminUpdateHostRole,
+  );
+  expressApp.delete(
+    "/api/admin/hosts/:hostId",
+    verifyHostSession,
+    handleAdminRemoveHost,
   );
 
   // Marina routes (public)
