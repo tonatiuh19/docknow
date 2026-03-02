@@ -346,6 +346,18 @@ export interface MarinaRegistrationResponse {
   marina_id?: number;
 }
 
+// Popular destination (city-level grouping)
+export interface PopularDestination {
+  city: string;
+  state: string | null;
+  country: string;
+  image_url: string | null;
+  avg_rating: number | null;
+  marina_count: number;
+}
+
+export type PopularDestinationsApiResponse = ApiResponse<PopularDestination[]>;
+
 // API endpoint types
 export type HealthResponse = ApiResponse<{ status: string; timestamp: string }>;
 export type MarinaSearchApiResponse = ApiResponse<MarinaSearchResponse>;

@@ -8,7 +8,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect } from "react";
 import MarinaMap from "@/components/MarinaMap";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
-import { fetchMarinas } from "@/store/slices/discoverySlice";
+import {
+  fetchMarinas,
+  fetchPopularDestinations,
+} from "@/store/slices/discoverySlice";
 import { selectDiscoveryViewData } from "@/store/selectors/discoverySelectors";
 import {
   MapPin,
@@ -42,6 +45,12 @@ const Index = () => {
   const { marinas, loading: marinasLoading } = useAppSelector(
     selectDiscoveryViewData,
   );
+  const popularDestinations = useAppSelector(
+    (state) => state.discovery.popularDestinations,
+  );
+  const popularDestinationsLoading = useAppSelector(
+    (state) => state.discovery.loading.popularDestinations,
+  );
 
   const [useVideoBackground, setUseVideoBackground] = useState(true);
   const [videoLoaded, setVideoLoaded] = useState(false);
@@ -73,6 +82,7 @@ const Index = () => {
   // Fetch featured marinas for the map
   useEffect(() => {
     dispatch(fetchMarinas({ limit: 10, featured: true }));
+    dispatch(fetchPopularDestinations(8));
   }, [dispatch]);
 
   // Handle search submission
@@ -123,36 +133,8 @@ const Index = () => {
     },
   };
 
-  const destinations = [
-    {
-      name: "Monaco",
-      image:
-        "https://images.pexels.com/photos/25237448/pexels-photo-25237448.jpeg",
-      rating: 4.9,
-      spots: "12 Available",
-    },
-    {
-      name: "Ibiza",
-      image:
-        "https://images.pexels.com/photos/15181123/pexels-photo-15181123.jpeg",
-      rating: 4.8,
-      spots: "8 Available",
-    },
-    {
-      name: "Mykonos",
-      image:
-        "https://images.pexels.com/photos/15181124/pexels-photo-15181124.jpeg",
-      rating: 4.7,
-      spots: "5 Available",
-    },
-    {
-      name: "Miami",
-      image:
-        "https://images.pexels.com/photos/15181125/pexels-photo-15181125.jpeg",
-      rating: 4.9,
-      spots: "15 Available",
-    },
-  ];
+  const DESTINATION_FALLBACK =
+    "https://images.pexels.com/photos/1118877/pexels-photo-1118877.jpeg?auto=compress&cs=tinysrgb&w=800";
 
   return (
     <Layout>
@@ -534,41 +516,66 @@ const Index = () => {
           </motion.div>
 
           <div className="grid md:grid-cols-4 gap-8">
-            {destinations.map((dest, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, scale: 0.95 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                whileHover={{ y: -8 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.1 }}
-                className="group cursor-pointer"
-              >
-                <div className="relative h-[400px] rounded-[2rem] overflow-hidden mb-4 shadow-xl shadow-navy-200/50">
-                  <img
-                    src={dest.image}
-                    alt={dest.name}
-                    className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-navy-950/80 via-transparent to-transparent" />
-                  <div className="absolute bottom-6 left-6 right-6">
-                    <div className="flex items-center gap-2 text-white/90 text-sm font-medium mb-1">
-                      <Star className="w-4 h-4 fill-orange-400 text-orange-400" />
-                      {dest.rating}
+            {popularDestinationsLoading
+              ? Array.from({ length: 4 }).map((_, index) => (
+                  <div key={index} className="group">
+                    <div className="relative h-[400px] rounded-[2rem] overflow-hidden mb-4 shadow-xl shadow-navy-200/50 bg-navy-100 animate-pulse" />
+                    <div className="px-2 space-y-2">
+                      <div className="h-4 w-28 bg-navy-100 rounded-full animate-pulse" />
                     </div>
-                    <h3 className="text-2xl font-bold text-white">
-                      {dest.name}
-                    </h3>
                   </div>
-                </div>
-                <div className="px-2">
-                  <div className="text-navy-500 font-medium flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-                    {dest.spots}
-                  </div>
-                </div>
-              </motion.div>
-            ))}
+                ))
+              : popularDestinations.slice(0, 4).map((dest, index) => (
+                  <motion.div
+                    key={`${dest.city}-${index}`}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    whileInView={{ opacity: 1, scale: 1 }}
+                    whileHover={{ y: -8 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: index * 0.1 }}
+                    className="group cursor-pointer"
+                    onClick={() =>
+                      navigate(
+                        `/discover?searchTerm=${encodeURIComponent(dest.city)}`,
+                      )
+                    }
+                  >
+                    <div className="relative h-[400px] rounded-[2rem] overflow-hidden mb-4 shadow-xl shadow-navy-200/50">
+                      <img
+                        src={dest.image_url ?? DESTINATION_FALLBACK}
+                        alt={dest.city}
+                        className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                        onError={(e) =>
+                          ((e.target as HTMLImageElement).src =
+                            DESTINATION_FALLBACK)
+                        }
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-navy-950/80 via-transparent to-transparent" />
+                      <div className="absolute bottom-6 left-6 right-6">
+                        {dest.avg_rating !== null && (
+                          <div className="flex items-center gap-2 text-white/90 text-sm font-medium mb-1">
+                            <Star className="w-4 h-4 fill-orange-400 text-orange-400" />
+                            {dest.avg_rating.toFixed(1)}
+                          </div>
+                        )}
+                        <h3 className="text-2xl font-bold text-white">
+                          {dest.city}
+                        </h3>
+                        {dest.state && (
+                          <p className="text-white/60 text-sm">{dest.state}</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="px-2">
+                      <div className="text-navy-500 font-medium flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+                        {dest.marina_count}{" "}
+                        {dest.marina_count === 1 ? "Marina" : "Marinas"}{" "}
+                        Available
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
           </div>
         </div>
       </section>

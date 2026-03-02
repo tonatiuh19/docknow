@@ -101,6 +101,14 @@ const BUSINESS_TYPES = [
     icon: Star,
     gradient: "from-amber-500 to-amber-700",
   },
+  {
+    id: 5,
+    label: "Harbor",
+    description:
+      "Protected harbor with moorings and anchorages — coves are sub-locations within the harbor",
+    icon: Sailboat,
+    gradient: "from-teal-500 to-cyan-700",
+  },
 ];
 
 const AMENITIES = [

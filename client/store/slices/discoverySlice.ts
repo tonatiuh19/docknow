@@ -7,6 +7,8 @@ import type {
   MarinaFiltersApiResponse,
   MarinaFiltersResponse,
   Pagination,
+  PopularDestination,
+  PopularDestinationsApiResponse,
 } from "@shared/api";
 
 // Use explicit API base URL when set (e.g. production when UI and API are on different origins)
@@ -71,6 +73,20 @@ export const searchMarinas = createAsyncThunk(
   },
 );
 
+export const fetchPopularDestinations = createAsyncThunk(
+  "discovery/fetchPopularDestinations",
+  async (limit: number = 8) => {
+    const { data } = await axios.get<PopularDestinationsApiResponse>(
+      `${apiBaseURL}/api/marinas/popular-destinations`,
+      { params: { limit } },
+    );
+    if (!data.success || !data.data) {
+      throw new Error(data.error || "Failed to fetch popular destinations");
+    }
+    return data.data;
+  },
+);
+
 export const loadMoreMarinas = createAsyncThunk(
   "discovery/loadMoreMarinas",
   async (_, { getState }) => {
@@ -100,6 +116,7 @@ export const loadMoreMarinas = createAsyncThunk(
 // State interface
 export interface DiscoveryState {
   marinas: Marina[];
+  popularDestinations: PopularDestination[];
   filters: MarinaFiltersResponse | null;
   searchParams: MarinaSearchParams;
   pagination: Pagination;
@@ -108,12 +125,14 @@ export interface DiscoveryState {
     filters: boolean;
     search: boolean;
     loadMore: boolean;
+    popularDestinations: boolean;
   };
   errors: {
     marinas: string | null;
     filters: string | null;
     search: string | null;
     loadMore: string | null;
+    popularDestinations: string | null;
   };
   viewType: "list" | "map";
   selectedMarina: Marina | null;
@@ -122,6 +141,7 @@ export interface DiscoveryState {
 // Initial state
 const initialState: DiscoveryState = {
   marinas: [],
+  popularDestinations: [],
   filters: null,
   searchParams: {
     limit: 20,
@@ -138,12 +158,14 @@ const initialState: DiscoveryState = {
     filters: false,
     search: false,
     loadMore: false,
+    popularDestinations: false,
   },
   errors: {
     marinas: null,
     filters: null,
     search: null,
     loadMore: null,
+    popularDestinations: null,
   },
   viewType: "list",
   selectedMarina: null,
@@ -261,6 +283,22 @@ const discoverySlice = createSlice({
         state.loading.loadMore = false;
         state.errors.loadMore =
           action.error.message || "Failed to load more marinas";
+      });
+
+    // Popular destinations
+    builder
+      .addCase(fetchPopularDestinations.pending, (state) => {
+        state.loading.popularDestinations = true;
+        state.errors.popularDestinations = null;
+      })
+      .addCase(fetchPopularDestinations.fulfilled, (state, action) => {
+        state.loading.popularDestinations = false;
+        state.popularDestinations = action.payload;
+      })
+      .addCase(fetchPopularDestinations.rejected, (state, action) => {
+        state.loading.popularDestinations = false;
+        state.errors.popularDestinations =
+          action.error.message || "Failed to fetch popular destinations";
       });
   },
 });

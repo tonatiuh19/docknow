@@ -5844,6 +5844,63 @@ const handleMarinaAvailability = async (req: Request, res: Response) => {
 };
 
 /**
+ * GET /api/marinas/popular-destinations
+ * Returns top cities grouped by marina count and average rating.
+ */
+const handlePopularDestinations = async (req: Request, res: Response) => {
+  try {
+    const limit = parseInt((req.query.limit as string) || "8");
+
+    const rows = await query<RowDataPacket[]>(
+      `SELECT
+         m.city,
+         m.state,
+         m.country,
+         (
+           SELECT cover_image_url
+           FROM marinas
+           WHERE city = m.city AND state <=> m.state AND is_active = 1
+             AND cover_image_url IS NOT NULL
+           ORDER BY is_featured DESC, created_at DESC
+           LIMIT 1
+         ) AS image_url,
+         ROUND(
+           (
+             SELECT AVG(r.rating)
+             FROM reviews r
+             INNER JOIN marinas m2 ON r.marina_id = m2.id
+             WHERE m2.city = m.city AND m2.state <=> m.state AND m2.is_active = 1
+           ),
+           1
+         ) AS avg_rating,
+         COUNT(DISTINCT m.id) AS marina_count
+       FROM marinas m
+       WHERE m.is_active = 1
+       GROUP BY m.city, m.state, m.country
+       ORDER BY marina_count DESC, avg_rating DESC
+       LIMIT ?`,
+      [limit],
+    );
+
+    const destinations = rows.map((row) => ({
+      city: row.city,
+      state: row.state || null,
+      country: row.country,
+      image_url: row.image_url || null,
+      avg_rating: row.avg_rating ? Number(row.avg_rating) : null,
+      marina_count: Number(row.marina_count),
+    }));
+
+    res.json({ success: true, data: destinations });
+  } catch (error) {
+    console.error("Error fetching popular destinations:", error);
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to fetch popular destinations" });
+  }
+};
+
+/**
  * GET /api/marinas/:slug
  * Get marina details by slug
  */
@@ -7508,6 +7565,10 @@ function createServer() {
   expressApp.get("/api/marinas/search", handleMarinaSearch);
   expressApp.get("/api/marinas/filters", handleMarinaFilters);
   expressApp.get("/api/marinas/availability", handleMarinaAvailability);
+  expressApp.get(
+    "/api/marinas/popular-destinations",
+    handlePopularDestinations,
+  );
   expressApp.get("/api/marinas/:slug", handleMarinaDetails);
 
   // FAQ routes (public)

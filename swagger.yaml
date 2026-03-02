@@ -1390,7 +1390,7 @@ paths:
                 business_type_id:
                   type: integer
                   example: 1
-                  description: "1=Full Service, 2=Dry Storage, 3=Private Port, 4=Yacht Club"
+                  description: "1=Full Service, 2=Dry Storage, 3=Private Port, 4=Yacht Club, 5=Harbor"
                 name:
                   type: string
                   example: "Sunset Bay Marina"
@@ -1529,6 +1529,39 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /marinas/popular-destinations:
+    get:
+      tags: [Marinas]
+      summary: Get popular destinations grouped by city
+      operationId: getPopularDestinations
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, default: 8 }
+          description: Max number of destinations to return
+      responses:
+        "200":
+          description: List of popular destinations ordered by marina count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        city: { type: string }
+                        state: { type: string, nullable: true }
+                        country: { type: string }
+                        image_url: { type: string, nullable: true }
+                        avg_rating: { type: number, nullable: true }
+                        marina_count: { type: integer }
+        "500":
+          description: Server error
 
   /marinas/search:
     get:

@@ -9,7 +9,7 @@ import {
 
 export interface HostOnboardingFormData {
   // Step 1 – Venue type
-  business_type_id: number; // 1=Full Service, 2=Dry Storage, 3=Private Port, 4=Yacht Club
+  business_type_id: number; // 1=Full Service, 2=Dry Storage, 3=Private Port, 4=Yacht Club, 5=Harbor
 
   // Step 2 – Basic info
   name: string;
