@@ -7,6 +7,7 @@
 - **NEVER fetch data directly in components with axios or fetch**
 - **ALL data fetching MUST be done in Redux store (slices) using createAsyncThunk**
 - **Components ONLY dispatch actions and select state from store**
+- **if any update is made to api/index.ts, update swagger.yaml accordingly**
 - **NO EXCEPTIONS to these rules**
 
 ### Package Manager

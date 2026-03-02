@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
+import { fetchHostMarinaManagement } from "@/store/slices/adminMarinasSlice";
 import {
   Users,
   Plus,
@@ -68,6 +69,8 @@ const createHostSchema = Yup.object({
   email: Yup.string().email("Invalid email").required("Email is required"),
   fullName: Yup.string().required("Full name is required"),
   phone: Yup.string().optional(),
+  marinaId: Yup.number().required("Marina is required"),
+  role: Yup.string().oneOf(["primary", "manager", "staff"]).optional(),
 });
 
 const AdminHosts = () => {
@@ -82,31 +85,39 @@ const AdminHosts = () => {
     updating,
     error,
   } = useAppSelector((state) => state.adminHosts);
+  const { marinas: adminMarinas } = useAppSelector(
+    (state) => state.adminMarinas,
+  );
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [selectedMarina, setSelectedMarina] = useState<number | null>(null);
   const [selectedHostForAssign, setSelectedHostForAssign] = useState<number>(0);
 
-  // Mock marina data - replace with actual fetch from marinas slice
-  const marinas = [
-    { id: 10, name: "Golden Gate Harbor Marina" },
-    { id: 11, name: "Sunset Bay Marina" },
-    { id: 12, name: "Miami Beach Yacht Club" },
-  ];
+  const marinas = adminMarinas.map((m) => ({ id: m.id, name: m.name }));
 
   const createHostFormik = useFormik({
     initialValues: {
       email: "",
       fullName: "",
       phone: "",
+      marinaId: null as number | null, // will be set once marinas load
+      role: "manager" as "primary" | "manager" | "staff",
     },
     validationSchema: createHostSchema,
     onSubmit: async (values, { resetForm }) => {
       const result = await dispatch(createHost(values));
       if (createHost.fulfilled.match(result)) {
         setCreateDialogOpen(false);
-        resetForm();
+        resetForm({
+          values: {
+            email: "",
+            fullName: "",
+            phone: "",
+            marinaId: adminMarinas[0]?.id ?? null,
+            role: "manager",
+          },
+        });
         // Refresh the hosts list
         dispatch(fetchManagedHosts(selectedMarina || undefined));
       }
@@ -116,6 +127,17 @@ const AdminHosts = () => {
   useEffect(() => {
     dispatch(fetchManagedHosts(selectedMarina || undefined));
   }, [dispatch, selectedMarina]);
+
+  useEffect(() => {
+    dispatch(fetchHostMarinaManagement());
+  }, [dispatch]);
+
+  // Pre-select the first marina once the list loads
+  useEffect(() => {
+    if (adminMarinas.length > 0 && createHostFormik.values.marinaId === null) {
+      createHostFormik.setFieldValue("marinaId", adminMarinas[0].id);
+    }
+  }, [adminMarinas]);
 
   const handleAssignHost = async () => {
     if (!selectedMarina || !selectedHostForAssign) {
@@ -280,6 +302,52 @@ const AdminHosts = () => {
                           {...createHostFormik.getFieldProps("phone")}
                           className="mt-1"
                         />
+                      </div>
+                      <div>
+                        <Label>Assign to Marina</Label>
+                        <Select
+                          value={
+                            createHostFormik.values.marinaId?.toString() ?? ""
+                          }
+                          onValueChange={(value) =>
+                            createHostFormik.setFieldValue(
+                              "marinaId",
+                              parseInt(value),
+                            )
+                          }
+                        >
+                          <SelectTrigger className="mt-1">
+                            <SelectValue placeholder="Select a marina" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {marinas.map((marina) => (
+                              <SelectItem
+                                key={marina.id}
+                                value={marina.id.toString()}
+                              >
+                                {marina.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>Role</Label>
+                        <Select
+                          value={createHostFormik.values.role}
+                          onValueChange={(value) =>
+                            createHostFormik.setFieldValue("role", value)
+                          }
+                        >
+                          <SelectTrigger className="mt-1">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="primary">Primary</SelectItem>
+                            <SelectItem value="manager">Manager</SelectItem>
+                            <SelectItem value="staff">Staff</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
                     <DialogFooter>

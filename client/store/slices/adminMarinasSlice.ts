@@ -108,6 +108,15 @@ interface PointItem {
   updated_at: string;
 }
 
+interface MarinaImageItem {
+  id: number;
+  image_url: string;
+  title: string | null;
+  display_order: number;
+  is_primary: boolean;
+  created_at: string;
+}
+
 export interface MarinaManagementItem {
   id: number;
   name: string;
@@ -124,6 +133,7 @@ export interface MarinaManagementItem {
   seabeds: SeabedItem[];
   moorings: MooringItem[];
   points: PointItem[];
+  images: MarinaImageItem[];
   pricing: {
     slips: PriceRange;
     moorings: PriceRange;
@@ -351,6 +361,166 @@ export const manageMarinaPoints = createAsyncThunk(
   },
 );
 
+export const manageMarinaImages = createAsyncThunk(
+  "adminMarinas/manageMarinaImages",
+  async (
+    payload: {
+      action: "create" | "delete";
+      marinaId?: number;
+      imageUrl?: string;
+      image?: {
+        image_url?: string;
+        title?: string;
+        display_order?: number;
+        is_primary?: boolean;
+      };
+    },
+    { getState, rejectWithValue },
+  ) => {
+    try {
+      const { hostAuth } = getState() as RootState;
+      const token = hostAuth.sessionToken;
+
+      await axios.post("/api/host/marina-management/images", payload, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      return payload;
+    } catch (error: any) {
+      return rejectWithValue(
+        error.response?.data?.error || "Failed to manage marina images",
+      );
+    }
+  },
+);
+
+export const uploadMarinaImage = createAsyncThunk(
+  "adminMarinas/uploadMarinaImage",
+  async (
+    payload: {
+      marinaId: number;
+      file: File;
+      imageType: "main" | "extra";
+      title?: string;
+      displayOrder?: number;
+    },
+    { dispatch, rejectWithValue },
+  ) => {
+    try {
+      const formData = new FormData();
+      formData.append("main_folder", "docknow");
+      formData.append("id", String(payload.marinaId));
+
+      if (payload.imageType === "main") {
+        formData.append("main_image", payload.file);
+      } else {
+        formData.append("images[]", payload.file);
+      }
+
+      const response = await axios.post(
+        "https://disruptinglabs.com/data/api/uploadImages.php",
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        },
+      );
+
+      if (!response.data?.success) {
+        throw new Error(response.data?.error || "Image upload failed");
+      }
+
+      const uploaded =
+        payload.imageType === "main"
+          ? response.data?.main_image
+          : response.data?.extra_images?.[0];
+
+      if (!uploaded?.path) {
+        throw new Error("No uploaded image path returned");
+      }
+
+      const imageUrl = uploaded.path.startsWith("http")
+        ? uploaded.path
+        : `https://disruptinglabs.com${uploaded.path}`;
+
+      await dispatch(
+        manageMarinaImages({
+          action: "create",
+          marinaId: payload.marinaId,
+          image: {
+            image_url: imageUrl,
+            title: payload.title || payload.file.name,
+            display_order: payload.displayOrder ?? 0,
+            is_primary: payload.imageType === "main",
+          },
+        }),
+      ).unwrap();
+
+      return {
+        marinaId: payload.marinaId,
+        imageUrl,
+      };
+    } catch (error: any) {
+      return rejectWithValue(
+        error.message ||
+          error.response?.data?.error ||
+          "Failed to upload image",
+      );
+    }
+  },
+);
+
+export const deleteMarinaImage = createAsyncThunk(
+  "adminMarinas/deleteMarinaImage",
+  async (
+    payload: {
+      marinaId: number;
+      imageUrl: string;
+    },
+    { dispatch, rejectWithValue },
+  ) => {
+    try {
+      const fileName = payload.imageUrl.split("/").pop();
+      const imageType = payload.imageUrl.includes("/main_image/")
+        ? "main"
+        : "extra";
+
+      if (fileName && payload.imageUrl.includes("disruptinglabs.com/data/")) {
+        try {
+          await axios.delete(
+            "https://disruptinglabs.com/data/api/uploadImages.php",
+            {
+              data: {
+                main_folder: "docknow",
+                id: String(payload.marinaId),
+                filename: fileName,
+                image_type: imageType,
+              },
+            },
+          );
+        } catch {
+          // Continue and remove database reference even if remote file is not found.
+        }
+      }
+
+      await dispatch(
+        manageMarinaImages({
+          action: "delete",
+          marinaId: payload.marinaId,
+          imageUrl: payload.imageUrl,
+        }),
+      ).unwrap();
+
+      return payload;
+    } catch (error: any) {
+      return rejectWithValue(
+        error.message ||
+          error.response?.data?.error ||
+          "Failed to delete image",
+      );
+    }
+  },
+);
+
 const adminMarinasSlice = createSlice({
   name: "adminMarinas",
   initialState,
@@ -449,6 +619,39 @@ const adminMarinasSlice = createSlice({
         state.saving = false;
       })
       .addCase(manageMarinaPoints.rejected, (state, action) => {
+        state.saving = false;
+        state.error = action.payload as string;
+      })
+      .addCase(manageMarinaImages.pending, (state) => {
+        state.saving = true;
+        state.error = null;
+      })
+      .addCase(manageMarinaImages.fulfilled, (state) => {
+        state.saving = false;
+      })
+      .addCase(manageMarinaImages.rejected, (state, action) => {
+        state.saving = false;
+        state.error = action.payload as string;
+      })
+      .addCase(uploadMarinaImage.pending, (state) => {
+        state.saving = true;
+        state.error = null;
+      })
+      .addCase(uploadMarinaImage.fulfilled, (state) => {
+        state.saving = false;
+      })
+      .addCase(uploadMarinaImage.rejected, (state, action) => {
+        state.saving = false;
+        state.error = action.payload as string;
+      })
+      .addCase(deleteMarinaImage.pending, (state) => {
+        state.saving = true;
+        state.error = null;
+      })
+      .addCase(deleteMarinaImage.fulfilled, (state) => {
+        state.saving = false;
+      })
+      .addCase(deleteMarinaImage.rejected, (state, action) => {
         state.saving = false;
         state.error = action.payload as string;
       });

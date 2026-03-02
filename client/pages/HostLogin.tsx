@@ -270,154 +270,159 @@ const HostLogin = () => {
               </motion.div>
             )}
 
-            <AnimatePresence mode="wait">
-              {/* Step 1: Email */}
-              {step === "email" && (
-                <motion.form
-                  key="email"
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                  onSubmit={handleEmailSubmit}
-                  className="space-y-6"
-                >
-                  <div>
-                    <Label
-                      htmlFor="email"
-                      className="text-navy-700 font-semibold text-sm mb-2 flex items-center gap-2"
-                    >
-                      <Mail className="w-4 h-4" />
-                      Host Email Address
-                    </Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="your@marina.com"
-                      className="h-14 text-lg border-navy-200 focus:border-ocean-500 focus:ring-ocean-500"
-                      required
-                      autoFocus
-                    />
-                  </div>
-
-                  <Button
-                    type="submit"
-                    disabled={isLoading || !email}
-                    className="w-full h-14 bg-gradient-ocean hover:shadow-glow text-white font-bold text-lg rounded-xl transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:hover:scale-100"
+            <div style={{ position: "relative" }}>
+              <AnimatePresence mode="wait">
+                {/* Step 1: Email */}
+                {step === "email" && (
+                  <motion.form
+                    key="email"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    onSubmit={handleEmailSubmit}
+                    autoComplete="off"
+                    className="space-y-6"
                   >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                        Sending code...
-                      </>
-                    ) : (
-                      <>
-                        Continue
-                        <ArrowRight className="h-5 w-5 ml-2" />
-                      </>
-                    )}
-                  </Button>
-
-                  <div className="relative my-8">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-navy-200"></div>
+                    <div>
+                      <Label
+                        htmlFor="email"
+                        className="text-navy-700 font-semibold text-sm mb-2 flex items-center gap-2"
+                      >
+                        <Mail className="w-4 h-4" />
+                        Host Email Address
+                      </Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="your@marina.com"
+                        className="h-14 text-lg border-navy-200 focus:border-ocean-500 focus:ring-ocean-500"
+                        autoComplete="off"
+                        required
+                        autoFocus
+                      />
                     </div>
-                    <div className="relative flex justify-center text-sm">
-                      <span className="px-4 bg-white text-navy-500">
-                        Secure host login
-                      </span>
-                    </div>
-                  </div>
 
-                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
-                    <div className="flex gap-3">
-                      <Shield className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <h4 className="font-semibold text-blue-900 text-sm mb-1">
-                          Host-only access
-                        </h4>
-                        <p className="text-xs text-blue-700 leading-relaxed">
-                          Only registered marina hosts can access the dashboard.
-                          If your email is not recognized, please contact
-                          support.
-                        </p>
+                    <Button
+                      type="submit"
+                      disabled={isLoading || !email}
+                      className="w-full h-14 bg-gradient-ocean hover:shadow-glow text-white font-bold text-lg rounded-xl transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:hover:scale-100"
+                    >
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                          Sending code...
+                        </>
+                      ) : (
+                        <>
+                          Continue
+                          <ArrowRight className="h-5 w-5 ml-2" />
+                        </>
+                      )}
+                    </Button>
+
+                    <div className="relative my-8">
+                      <div className="absolute inset-0 flex items-center">
+                        <div className="w-full border-t border-navy-200"></div>
+                      </div>
+                      <div className="relative flex justify-center text-sm">
+                        <span className="px-4 bg-white text-navy-500">
+                          Secure host login
+                        </span>
                       </div>
                     </div>
-                  </div>
-                </motion.form>
-              )}
 
-              {/* Step 2: Verify Code */}
-              {step === "verify" && (
-                <motion.form
-                  key="verify"
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                  onSubmit={handleVerifyCode}
-                  className="space-y-6"
-                >
-                  <div className="p-4 bg-ocean-50 border border-ocean-200 rounded-xl mb-6">
-                    <p className="text-navy-700 text-sm">
-                      We sent a 6-digit code to{" "}
-                      <strong className="text-navy-900">{email}</strong>
-                    </p>
-                  </div>
-
-                  <div>
-                    <Label className="text-navy-700 font-semibold text-sm mb-3 flex items-center gap-2">
-                      <Lock className="w-4 h-4" />
-                      Verification Code
-                    </Label>
-                    <div className="flex gap-3 justify-center">
-                      {code.map((digit, index) => (
-                        <input
-                          key={index}
-                          id={`host-code-${index}`}
-                          type="text"
-                          inputMode="numeric"
-                          maxLength={1}
-                          value={digit}
-                          onChange={(e) =>
-                            handleCodeChange(index, e.target.value)
-                          }
-                          onPaste={handlePaste}
-                          className="w-14 h-16 text-center text-2xl font-bold border-2 border-navy-200 rounded-xl focus:border-ocean-500 focus:ring-4 focus:ring-ocean-100 transition-all outline-none"
-                          autoFocus={index === 0}
-                        />
-                      ))}
+                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                      <div className="flex gap-3">
+                        <Shield className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <h4 className="font-semibold text-blue-900 text-sm mb-1">
+                            Host-only access
+                          </h4>
+                          <p className="text-xs text-blue-700 leading-relaxed">
+                            Only registered marina hosts can access the
+                            dashboard. If your email is not recognized, please
+                            contact support.
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  </motion.form>
+                )}
 
-                  <Button
-                    type="submit"
-                    disabled={isLoading || code.some((d) => !d)}
-                    className="w-full h-14 bg-gradient-ocean hover:shadow-glow text-white font-bold text-lg rounded-xl transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:hover:scale-100"
+                {/* Step 2: Verify Code */}
+                {step === "verify" && (
+                  <motion.form
+                    key="verify"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    onSubmit={handleVerifyCode}
+                    autoComplete="off"
+                    className="space-y-6"
                   >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                        Verifying...
-                      </>
-                    ) : (
-                      <>
-                        Access Dashboard
-                        <ChevronRight className="h-5 w-5 ml-2" />
-                      </>
-                    )}
-                  </Button>
+                    <div className="p-4 bg-ocean-50 border border-ocean-200 rounded-xl mb-6">
+                      <p className="text-navy-700 text-sm">
+                        We sent a 6-digit code to{" "}
+                        <strong className="text-navy-900">{email}</strong>
+                      </p>
+                    </div>
 
-                  <button
-                    type="button"
-                    onClick={handleReset}
-                    className="w-full text-sm text-ocean-600 hover:text-ocean-700 font-medium py-2"
-                  >
-                    Use different email
-                  </button>
-                </motion.form>
-              )}
-            </AnimatePresence>
+                    <div>
+                      <Label className="text-navy-700 font-semibold text-sm mb-3 flex items-center gap-2">
+                        <Lock className="w-4 h-4" />
+                        Verification Code
+                      </Label>
+                      <div className="flex gap-3 justify-center">
+                        {code.map((digit, index) => (
+                          <input
+                            key={index}
+                            id={`host-code-${index}`}
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={1}
+                            value={digit}
+                            onChange={(e) =>
+                              handleCodeChange(index, e.target.value)
+                            }
+                            onPaste={handlePaste}
+                            className="w-14 h-16 text-center text-2xl font-bold border-2 border-navy-200 rounded-xl focus:border-ocean-500 focus:ring-4 focus:ring-ocean-100 transition-all outline-none"
+                            autoFocus={index === 0}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    <Button
+                      type="submit"
+                      disabled={isLoading || code.some((d) => !d)}
+                      className="w-full h-14 bg-gradient-ocean hover:shadow-glow text-white font-bold text-lg rounded-xl transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:hover:scale-100"
+                    >
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                          Verifying...
+                        </>
+                      ) : (
+                        <>
+                          Access Dashboard
+                          <ChevronRight className="h-5 w-5 ml-2" />
+                        </>
+                      )}
+                    </Button>
+
+                    <button
+                      type="button"
+                      onClick={handleReset}
+                      className="w-full text-sm text-ocean-600 hover:text-ocean-700 font-medium py-2"
+                    >
+                      Use different email
+                    </button>
+                  </motion.form>
+                )}
+              </AnimatePresence>
+            </div>
           </motion.div>
         </div>
       </div>

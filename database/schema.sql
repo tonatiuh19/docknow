@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost:3306
--- Generation Time: Feb 16, 2026 at 06:36 PM
+-- Generation Time: Mar 01, 2026 at 08:02 PM
 -- Server version: 5.7.23-23
 -- PHP Version: 8.1.34
 
@@ -253,7 +253,14 @@ CREATE TABLE `bookings` (
 
 INSERT INTO `bookings` (`id`, `user_id`, `marina_id`, `slip_id`, `boat_id`, `check_in_date`, `check_out_date`, `total_days`, `price_per_day`, `subtotal`, `service_fee`, `discount_amount`, `total_amount`, `coupon_code`, `status`, `requires_approval`, `approved_at`, `approved_by`, `stripe_payment_intent_id`, `cancelled_at`, `cancellation_reason`, `special_requests`, `pre_checkout_completed`, `pre_checkout_completed_at`, `created_at`, `updated_at`) VALUES
 (14, 7, 10, 29, 2, '2026-02-15', '2026-02-18', 3, 185.00, 555.00, 55.50, 0.00, 610.50, NULL, 'confirmed', 0, NULL, NULL, 'pi_3T0c4eGnfvtfvDAr0jBo5RiJ', NULL, NULL, NULL, 0, NULL, '2026-02-14 06:11:24', '2026-02-14 06:21:09'),
-(15, 7, 10, 28, 2, '2026-02-22', '2026-02-25', 3, 185.00, 555.00, 55.50, 0.00, 610.50, NULL, 'pending', 0, NULL, NULL, 'pi_3T1YkiGnfvtfvDAr1O4Nld30', NULL, NULL, NULL, 0, NULL, '2026-02-16 20:50:44', '2026-02-16 20:50:44');
+(15, 7, 10, 28, 2, '2026-02-22', '2026-02-25', 3, 185.00, 555.00, 55.50, 0.00, 610.50, NULL, 'pending', 0, NULL, NULL, 'pi_3T1YkiGnfvtfvDAr1O4Nld30', NULL, NULL, NULL, 0, NULL, '2026-02-16 20:50:44', '2026-02-16 20:50:44'),
+(16, 7, 10, 29, 2, '2026-02-24', '2026-02-28', 4, 185.00, 740.00, 74.00, 0.00, 814.00, NULL, 'pending', 0, NULL, NULL, 'pi_3T23buGnfvtfvDAr1VvC0WlB', NULL, NULL, NULL, 0, NULL, '2026-02-18 05:47:43', '2026-02-18 05:47:43'),
+(17, 7, 10, 27, 2, '2026-02-27', '2026-03-04', 5, 185.00, 925.00, 92.50, 0.00, 1017.50, NULL, 'pending', 0, NULL, NULL, 'pi_3T48cJGnfvtfvDAr1Y1BOPPC', NULL, NULL, NULL, 0, NULL, '2026-02-23 23:32:43', '2026-02-23 23:32:43'),
+(18, 7, 10, 28, 2, '2026-02-27', '2026-02-28', 1, 185.00, 185.00, 18.50, 0.00, 203.50, NULL, 'pending', 0, NULL, NULL, 'pi_3T5GatGnfvtfvDAr1KrtUVEw', NULL, NULL, NULL, 0, NULL, '2026-02-27 02:15:55', '2026-02-27 02:15:55'),
+(19, 7, 10, 27, 2, '2026-03-17', '2026-03-20', 3, 185.00, 555.00, 55.50, 0.00, 610.50, NULL, 'pending', 0, NULL, NULL, 'pi_3T5ajCGnfvtfvDAr0nAII4MH', NULL, NULL, NULL, 0, NULL, '2026-02-27 23:45:50', '2026-02-27 23:45:50'),
+(20, 7, 10, 28, 2, '2026-03-03', '2026-03-06', 3, 185.00, 555.00, 55.50, 0.00, 610.50, NULL, 'pending', 0, NULL, NULL, 'pi_3T5attGnfvtfvDAr0Jssgc46', NULL, NULL, NULL, 0, NULL, '2026-02-27 23:56:53', '2026-02-27 23:56:53'),
+(21, 7, 10, 29, 2, '2026-03-03', '2026-03-07', 4, 185.00, 740.00, 74.00, 0.00, 814.00, NULL, 'pending', 0, NULL, NULL, 'pi_3T5bkhGnfvtfvDAr1FIXE65O', NULL, NULL, NULL, 0, NULL, '2026-02-28 00:51:27', '2026-02-28 00:51:27'),
+(22, 7, 10, 27, 2, '2026-03-22', '2026-03-26', 4, 185.00, 740.00, 74.00, 0.00, 814.00, NULL, 'confirmed', 0, NULL, NULL, 'pi_3T5cUtGdyWn9Nlx00TpF89m3', NULL, NULL, NULL, 0, NULL, '2026-02-28 01:39:11', '2026-02-28 01:39:13');
 
 -- --------------------------------------------------------
 
@@ -328,6 +335,32 @@ CREATE TABLE `coupons` (
 
 INSERT INTO `coupons` (`id`, `marina_id`, `code`, `description`, `discount_type`, `discount_value`, `min_days`, `max_uses`, `times_used`, `valid_from`, `valid_until`, `is_active`, `created_at`, `updated_at`) VALUES
 (4, NULL, 'FIRSTTIME', 'First time booking discount - any marina', 'percentage', 10.00, 2, 1000, 0, '2024-01-01 06:00:00', '2026-01-01 05:59:59', 1, '2025-11-29 23:46:15', '2025-11-29 23:46:15');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `environment_keys`
+--
+
+CREATE TABLE `environment_keys` (
+  `id` int(10) UNSIGNED NOT NULL,
+  `title` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Service name, e.g. stripe',
+  `type` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Key type: publishable | secret | webhook',
+  `key_string` text COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'The actual key value',
+  `is_test` tinyint(1) NOT NULL DEFAULT '1' COMMENT '1 = test/sandbox, 0 = live/production',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `environment_keys`
+--
+
+INSERT INTO `environment_keys` (`id`, `title`, `type`, `key_string`, `is_test`, `created_at`, `updated_at`) VALUES
+(1, 'stripe', 'publishable', 'pk_test_REPLACE_WITH_YOUR_STRIPE_TEST_PUBLISHABLE_KEY', 1, '2026-02-23 23:51:17', '2026-02-23 23:51:17'),
+(2, 'stripe', 'secret', 'sk_test_REPLACE_WITH_YOUR_STRIPE_TEST_SECRET_KEY', 1, '2026-02-23 23:51:17', '2026-02-23 23:51:17'),
+(3, 'stripe', 'publishable', '', 0, '2026-02-23 23:51:17', '2026-02-23 23:51:17'),
+(4, 'stripe', 'secret', '', 0, '2026-02-23 23:51:17', '2026-02-23 23:51:17');
 
 -- --------------------------------------------------------
 
@@ -562,7 +595,8 @@ CREATE TABLE `hosts` (
 --
 
 INSERT INTO `hosts` (`id`, `marina_id`, `role`, `email`, `full_name`, `phone`, `phone_code`, `country_code`, `profile_image_url`, `company_name`, `is_active`, `email_verified`, `created_at`, `updated_at`) VALUES
-(1, 10, 'primary', 'axgoomez@gmail.com', 'Alex Gomez', '3121234567', '+52', 'MX', NULL, NULL, 1, 1, '2025-11-29 23:46:15', '2026-02-17 00:24:17');
+(1, 10, 'primary', 'axgoomez@gmail.com', 'Alex Gomez', '4741400363', '+52', 'MX', NULL, NULL, 1, 1, '2025-11-29 23:46:15', '2026-02-19 23:12:24'),
+(9, 10, 'primary', 'seanmoustakas@gmail.com', 'Sean Stanley', NULL, NULL, NULL, NULL, NULL, 1, 1, '2026-02-19 23:12:15', '2026-02-19 23:27:29');
 
 -- --------------------------------------------------------
 
@@ -602,7 +636,11 @@ INSERT INTO `host_sessions` (`id`, `host_id`, `verification_code`, `is_verified`
 (16, 1, '484777', 1, '2026-01-27 04:30:42', '2026-01-27 04:30:27'),
 (17, 1, '671269', 0, '2026-02-13 01:39:17', '2026-02-13 01:24:17'),
 (18, 1, '235745', 1, '2026-02-13 01:25:01', '2026-02-13 01:24:47'),
-(19, 1, '606222', 1, '2026-02-16 22:12:12', '2026-02-16 22:11:56');
+(19, 1, '606222', 1, '2026-02-16 22:12:12', '2026-02-16 22:11:56'),
+(20, 1, '635458', 1, '2026-02-19 22:44:30', '2026-02-19 22:44:17'),
+(21, 1, '274510', 1, '2026-02-19 22:53:39', '2026-02-19 22:53:24'),
+(22, 1, '385772', 0, '2026-02-19 23:20:28', '2026-02-19 23:05:28'),
+(23, 1, '601169', 1, '2026-02-19 23:07:20', '2026-02-19 23:07:08');
 
 -- --------------------------------------------------------
 
@@ -629,12 +667,15 @@ CREATE TABLE `marinas` (
   `contact_email` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `contact_phone` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `website_url` text COLLATE utf8mb4_unicode_ci,
+  `cover_image_url` text COLLATE utf8mb4_unicode_ci,
+  `gallery_image_urls` text COLLATE utf8mb4_unicode_ci,
   `total_slips` int(10) UNSIGNED DEFAULT '0',
   `available_slips` int(10) UNSIGNED DEFAULT '0',
   `max_boat_length_meters` decimal(8,2) DEFAULT NULL,
   `max_boat_draft_meters` decimal(8,2) DEFAULT NULL,
   `is_active` tinyint(1) DEFAULT '1',
   `is_featured` tinyint(1) DEFAULT '0',
+  `is_directory_only` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'When 1, this marina is a public directory entry only — not registered with DockNow and cannot be booked.',
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -643,12 +684,32 @@ CREATE TABLE `marinas` (
 -- Dumping data for table `marinas`
 --
 
-INSERT INTO `marinas` (`id`, `host_id`, `name`, `slug`, `description`, `business_type_id`, `price_per_day`, `city`, `state`, `country`, `address`, `postal_code`, `latitude`, `longitude`, `contact_name`, `contact_email`, `contact_phone`, `website_url`, `total_slips`, `available_slips`, `max_boat_length_meters`, `max_boat_draft_meters`, `is_active`, `is_featured`, `created_at`, `updated_at`) VALUES
-(10, 1, 'Golden Gate Harbor Marina', 'golden-gate-harbor-marina', 'Premium full-service marina located in the heart of San Francisco Bay. Featuring 120 slips, full fuel services, and stunning views of the Golden Gate Bridge. Perfect for both short-term visits and long-term docking.', 1, 185.00, 'San Francisco', 'California', 'United States', '2000 Marina Boulevard, San Francisco, CA', '94123', 37.80493000, -122.44177000, 'Carlos Rodriguez', 'marina.owner1@docknow.com', '+1 (415) 555-0123', 'https://goldengateharbor.com', 15, 14, 40.00, 4.50, 1, 1, '2026-02-14 05:07:02', '2026-02-14 05:07:02'),
-(11, 1, 'Sunset Bay Marina', 'sunset-bay-marina', 'Affordable family-friendly marina on Florida\'s Gulf Coast. Features 80 slips, boat ramp, and beautiful sunset views. Perfect for weekend getaways and fishing trips. Clean facilities and friendly staff.', 1, 95.00, 'Tampa', 'Florida', 'United States', '4500 Westshore Drive, Tampa, FL', '33616', 27.94752000, -82.51853000, 'Sofia Martinez', 'marina.owner2@docknow.com', '+1 (813) 555-0456', 'https://sunsetbaymarina.com', 10, 10, 25.00, 3.00, 1, 0, '2026-02-14 05:07:02', '2026-02-14 05:07:02'),
-(12, 1, 'Miami Beach Yacht Club', 'miami-beach-yacht-club', 'Exclusive yacht club offering world-class amenities and services for luxury vessels. Features concierge services, valet parking, premium dining, and 24/7 security. Accommodates vessels up to 80 meters.', 4, 450.00, 'Miami Beach', 'Florida', 'United States', '1 Ocean Drive, Miami Beach, FL', '33139', 25.78135000, -80.13005000, 'Juan Perez', 'marina.owner3@docknow.com', '+1 (305) 555-0789', 'https://miamibeachyc.com', 6, 6, 80.00, 8.00, 1, 1, '2026-02-14 05:07:02', '2026-02-14 05:07:02'),
-(13, 1, 'Galveston Island Marina', 'galveston-island-marina', 'Historic marina on Galveston Island offering excellent access to Gulf fishing grounds. Features 65 slips, ice house, bait shop, and fish cleaning stations. Great for sport fishing and family boating.', 1, 125.00, 'Galveston', 'Texas', 'United States', '715 North Holiday Drive, Galveston, TX', '77550', 29.31065000, -94.79088000, 'Ana Lopez', 'marina.owner4@docknow.com', '+1 (409) 555-0321', 'https://galvestonmarina.com', 9, 9, 35.00, 4.00, 1, 0, '2026-02-14 05:07:02', '2026-02-14 05:07:02'),
-(14, 1, 'Pacific Harbor Marina', 'pacific-harbor-marina', 'Beautiful marina in the Pacific Northwest with stunning mountain and water views. Features covered slips, excellent storm protection, and access to pristine cruising grounds. Popular with sailing enthusiasts.', 1, 145.00, 'Seattle', 'Washington', 'United States', '2601 West Marina Place, Seattle, WA', '98199', 47.64054000, -122.38946000, 'Miguel Hernandez', 'marina.owner5@docknow.com', '+1 (206) 555-0654', 'https://pacificharbor.com', 9, 9, 45.00, 5.00, 1, 1, '2026-02-14 05:07:02', '2026-02-14 05:07:02');
+INSERT INTO `marinas` (`id`, `host_id`, `name`, `slug`, `description`, `business_type_id`, `price_per_day`, `city`, `state`, `country`, `address`, `postal_code`, `latitude`, `longitude`, `contact_name`, `contact_email`, `contact_phone`, `website_url`, `cover_image_url`, `gallery_image_urls`, `total_slips`, `available_slips`, `max_boat_length_meters`, `max_boat_draft_meters`, `is_active`, `is_featured`, `is_directory_only`, `created_at`, `updated_at`) VALUES
+(10, 1, 'Golden Gate Harbor Marina', 'golden-gate-harbor-marina', 'Premium full-service marina located in the heart of San Francisco Bay. Featuring 120 slips, full fuel services, and stunning views of the Golden Gate Bridge. Perfect for both short-term visits and long-term docking.', 1, 185.00, 'San Francisco', 'California', 'United States', '2000 Marina Boulevard, San Francisco, CA', '94123', 37.80493000, -122.44177000, 'Carlos Rodriguez', 'marina.owner1@docknow.com', '+1 (415) 555-0123', 'https://goldengateharbor.com', NULL, NULL, 15, 14, 40.00, 4.50, 1, 1, 0, '2026-02-14 05:07:02', '2026-02-14 05:07:02'),
+(11, 1, 'Sunset Bay Marina', 'sunset-bay-marina', 'Affordable family-friendly marina on Florida\'s Gulf Coast. Features 80 slips, boat ramp, and beautiful sunset views. Perfect for weekend getaways and fishing trips. Clean facilities and friendly staff.', 1, 95.00, 'Tampa', 'Florida', 'United States', '4500 Westshore Drive, Tampa, FL', '33616', 27.94752000, -82.51853000, 'Sofia Martinez', 'marina.owner2@docknow.com', '+1 (813) 555-0456', 'https://sunsetbaymarina.com', NULL, NULL, 10, 10, 25.00, 3.00, 1, 0, 0, '2026-02-14 05:07:02', '2026-02-14 05:07:02'),
+(12, 1, 'Miami Beach Yacht Club', 'miami-beach-yacht-club', 'Exclusive yacht club offering world-class amenities and services for luxury vessels. Features concierge services, valet parking, premium dining, and 24/7 security. Accommodates vessels up to 80 meters.', 4, 450.00, 'Miami Beach', 'Florida', 'United States', '1 Ocean Drive, Miami Beach, FL', '33139', 25.78135000, -80.13005000, 'Juan Perez', 'marina.owner3@docknow.com', '+1 (305) 555-0789', 'https://miamibeachyc.com', NULL, NULL, 6, 6, 80.00, 8.00, 1, 1, 0, '2026-02-14 05:07:02', '2026-02-14 05:07:02'),
+(13, 1, 'Galveston Island Marina', 'galveston-island-marina', 'Historic marina on Galveston Island offering excellent access to Gulf fishing grounds. Features 65 slips, ice house, bait shop, and fish cleaning stations. Great for sport fishing and family boating.', 1, 125.00, 'Galveston', 'Texas', 'United States', '715 North Holiday Drive, Galveston, TX', '77550', 29.31065000, -94.79088000, 'Ana Lopez', 'marina.owner4@docknow.com', '+1 (409) 555-0321', 'https://galvestonmarina.com', NULL, NULL, 9, 9, 35.00, 4.00, 1, 0, 0, '2026-02-14 05:07:02', '2026-02-14 05:07:02'),
+(14, 1, 'Pacific Harbor Marina', 'pacific-harbor-marina', 'Beautiful marina in the Pacific Northwest with stunning mountain and water views. Features covered slips, excellent storm protection, and access to pristine cruising grounds. Popular with sailing enthusiasts.', 1, 145.00, 'Seattle', 'Washington', 'United States', '2601 West Marina Place, Seattle, WA', '98199', 47.64054000, -122.38946000, 'Miguel Hernandez', 'marina.owner5@docknow.com', '+1 (206) 555-0654', 'https://pacificharbor.com', NULL, NULL, 9, 9, 45.00, 5.00, 1, 1, 0, '2026-02-14 05:07:02', '2026-02-14 05:07:02'),
+(19, 1, 'Miami Beach Marina', 'miami-beach-marina', 'Premier full-service marina located in South Beach offering luxury slips and direct Atlantic access.', 1, 250.00, 'Miami Beach', 'Florida', 'United States', '300 Alton Rd', '33139', 25.77050000, -80.13400000, 'Dockmaster', 'info@miamibeachmarina.com', '+1 305 673 6000', 'https://miamibeachmarina.com', NULL, NULL, 400, 350, 76.00, 6.00, 1, 1, 1, '2026-03-02 01:43:07', '2026-03-02 01:43:07'),
+(20, 1, 'Bahia Mar Yachting Center', 'bahia-mar-yachting-center', 'Full-service yachting center on Fort Lauderdale Beach near the inlet; fuel, repair, and concierge services.', 1, 200.00, 'Fort Lauderdale', 'Florida', 'United States', '801 Seabreeze Blvd', '33316', 26.12180000, -80.10110000, 'Dockmaster', 'info@bahiamarfl.com', '+1 954 467 3275', 'https://bahiamar.com', NULL, NULL, 300, 260, 80.00, 5.50, 1, 1, 1, '2026-03-02 01:43:07', '2026-03-02 01:43:07'),
+(21, 1, 'Marina del Rey Harbor', 'marina-del-rey-harbor', 'Large protected marina with a mix of pleasure craft and charter services close to LA attractions.', 1, 200.00, 'Marina del Rey', 'California', 'United States', '13755 Fiji Way', '90292', 33.98030000, -118.45080000, 'Dockmaster', 'info@marinadelrey.com', '+1 310 305 9545', 'https://marinadelrey.com', NULL, NULL, 520, 480, 60.00, 5.00, 1, 1, 1, '2026-03-02 01:43:07', '2026-03-02 01:43:07'),
+(22, 1, 'Safe Harbor Sunroad Marina', 'safe-harbor-sunroad-marina', 'Modern marina in San Diego Bay with premium facilities and yacht services.', 1, 180.00, 'San Diego', 'California', 'United States', '955 Harbor Island Dr', '92101', 32.72940000, -117.19370000, 'Dockmaster', 'info@sunroadmarina.com', '+1 619 291 0915', 'https://www.sunroadmarina.com', NULL, NULL, 525, 470, 61.00, 5.50, 1, 1, 1, '2026-03-02 01:43:07', '2026-03-02 01:43:07'),
+(23, 1, 'Newport Harbor Marina', 'newport-harbor-marina', 'Popular Southern California marina with easy ocean access and yacht services.', 1, 190.00, 'Newport Beach', 'California', 'United States', '1600 W Balboa Blvd', '92661', 33.60800000, -117.92960000, 'Dockmaster', 'info@newportharbor.com', '+1 949 673 6416', 'https://newportharbor.org', NULL, NULL, 600, 540, 70.00, 6.00, 1, 1, 1, '2026-03-02 01:43:07', '2026-03-02 01:43:07'),
+(24, 1, 'Pier 25 Marina', 'pier-25-marina', 'Small but busy Manhattan marina on the Hudson River with city access and charter services.', 1, 160.00, 'New York', 'New York', 'United States', 'West St & N Moore St', '10013', 40.71880000, -74.01310000, 'Dockmaster', 'info@pier25marina.com', '+1 212 555 0100', 'https://example-pier25.com', NULL, NULL, 120, 100, 40.00, 4.50, 1, 0, 1, '2026-03-02 01:43:07', '2026-03-02 01:43:07'),
+(25, 1, 'Safe Harbor St. Pete Marina', 'safe-harbor-st-pete-marina', 'Protected marina near downtown St. Petersburg with full amenities and nearby restaurants.', 1, 140.00, 'St. Petersburg', 'Florida', 'United States', '6700 34th St N', '33710', 27.76260000, -82.69950000, 'Dockmaster', 'info@stpetemarina.com', '+1 727 555 0123', 'https://safeharbor.com', NULL, NULL, 420, 380, 50.00, 4.00, 1, 0, 1, '2026-03-02 01:43:07', '2026-03-02 01:43:07'),
+(26, 1, 'Charleston Harbor Marina', 'charleston-harbor-marina', 'Historic Charleston marina with resort access and full service for cruising yachts.', 1, 160.00, 'Charleston', 'South Carolina', 'United States', '20 Patriots Point Rd', '29464', 32.78730000, -79.87650000, 'Dockmaster', 'info@charlestonmarina.com', '+1 843 555 0145', 'https://charlestonharbor.com', NULL, NULL, 260, 230, 50.00, 4.50, 1, 0, 1, '2026-03-02 01:43:07', '2026-03-02 01:43:07'),
+(27, 1, 'Newport Harbor Marina', 'newport-harbor-ri', 'Classic New England marina with close access to Newport waterfront and sailing clubs.', 1, 170.00, 'Newport', 'Rhode Island', 'United States', '20 Long Wharf', '02840', 41.49010000, -71.31280000, 'Dockmaster', 'info@newportmarina.com', '+1 401 555 0199', 'https://newportharbor.com', NULL, NULL, 240, 210, 55.00, 4.50, 1, 0, 1, '2026-03-02 01:43:07', '2026-03-02 01:43:07'),
+(28, 1, 'Portland Harbor Marina', 'portland-harbor-marina', 'Regional marina with fishing charters and access to the Gulf of Maine.', 1, 130.00, 'Portland', 'Maine', 'United States', '1 Long Wharf', '04101', 43.65910000, -70.25680000, 'Dockmaster', 'info@portlandmarina.com', '+1 207 555 0111', 'https://portlandharbor.com', NULL, NULL, 180, 160, 25.00, 3.50, 1, 0, 1, '2026-03-02 01:43:07', '2026-03-02 01:43:07'),
+(29, 1, 'IGY Marina Cabo San Lucas', 'igy-marina-cabo-san-lucas', 'Iconic world-class marina in Baja California Sur serving sportfishing fleets and superyachts.', 1, 220.00, 'Cabo San Lucas', 'Baja California Sur', 'Mexico', 'Lote A-18 de la Dársena, Centro', '23450', 22.88390000, -109.90370000, 'Dockmaster', 'info.cabo@igymarinas.com', '+52 624 173 9130', 'https://www.igymarinas.com', NULL, NULL, 380, 340, 91.00, 6.50, 1, 1, 1, '2026-03-02 01:43:07', '2026-03-02 01:43:07'),
+(30, 1, 'Marina Vallarta', 'marina-vallarta', 'Full-service marina in Puerto Vallarta offering slips, fuel dock, and resort access.', 1, 150.00, 'Puerto Vallarta', 'Jalisco', 'Mexico', 'Paseo de la Marina, Marina Vallarta', '48335', 20.65530000, -105.25450000, 'Dockmaster', 'info@marinavallarta.net', '+52 322 221 0275', 'https://marinavallarta.net', NULL, NULL, 450, 410, 55.00, 4.50, 1, 1, 1, '2026-03-02 01:43:07', '2026-03-02 01:43:07'),
+(31, 1, 'Marina El Cid Mazatlán', 'marina-el-cid-mazatlan', 'Resort marina adjacent to El Cid properties with charter services and leisure slips.', 1, 140.00, 'Mazatlán', 'Sinaloa', 'Mexico', 'Av. Camarón Sábalo 123', '82110', 23.24480000, -106.41110000, 'Dockmaster', 'info@marinaelcid.com.mx', '+52 669 123 4567', 'https://marinaelcid.com.mx', NULL, NULL, 220, 200, 40.00, 4.00, 1, 0, 1, '2026-03-02 01:43:07', '2026-03-02 01:43:07'),
+(32, 1, 'Miami Harbor Club', 'miami-harbor-club', 'Central Miami marina with a mix of private slips and transient dockage.', 1, 170.00, 'Miami', 'Florida', 'United States', '100 Biscayne Blvd', '33132', 25.77650000, -80.18930000, 'Dockmaster', 'info@miamiharborclub.com', '+1 305 555 0178', 'https://example-miami-harbor.com', NULL, NULL, 280, 240, 60.00, 5.00, 1, 0, 1, '2026-03-02 01:43:07', '2026-03-02 01:43:07'),
+(33, 1, 'Key West Harbor Marina', 'key-west-harbor-marina', 'Strategic marina near Key West with charter, fishing and tourist services.', 1, 220.00, 'Key West', 'Florida', 'United States', '700 Front St', '33040', 24.55510000, -81.78260000, 'Dockmaster', 'info@keywestmarina.com', '+1 305 555 0133', 'https://keywestharbor.com', NULL, NULL, 200, 160, 30.00, 3.00, 1, 0, 1, '2026-03-02 01:43:07', '2026-03-02 01:43:07'),
+(34, 1, 'Marina Bay Yacht Harbor', 'marina-bay-yacht-harbor', 'Marina near San Francisco Bay serving local boaters and transient yachts.', 1, 180.00, 'San Francisco', 'California', 'United States', 'Pier 9', '94111', 37.79100000, -122.39260000, 'Dockmaster', 'info@marinabay.com', '+1 415 555 0140', 'https://example-marina-sf.com', NULL, NULL, 320, 280, 60.00, 5.50, 1, 0, 1, '2026-03-02 01:43:07', '2026-03-02 01:43:07'),
+(35, 1, 'Galveston Yacht Basin', 'galveston-yacht-basin', 'Protected Texas Gulf marina serving the Houston/Galveston boating community.', 1, 110.00, 'Galveston', 'Texas', 'United States', '300 Seawolf Park Blvd', '77550', 29.28100000, -94.81600000, 'Dockmaster', 'info@galvestonyachtbasin.com', '+1 409 555 0150', 'https://galvestonyachtbasin.com', NULL, NULL, 260, 230, 40.00, 3.50, 1, 0, 1, '2026-03-02 01:43:07', '2026-03-02 01:43:07'),
+(36, 1, 'Chicago Harbor Marina', 'chicago-harbor-marina', 'Busy urban marina on Lake Michigan with city access and charter services.', 1, 150.00, 'Chicago', 'Illinois', 'United States', '1400 S Lake Shore Dr', '60605', 41.86760000, -87.60680000, 'Dockmaster', 'info@chicagoharbor.com', '+1 312 555 0162', 'https://chicagoharbor.com', NULL, NULL, 400, 360, 45.00, 4.00, 1, 0, 1, '2026-03-02 01:43:07', '2026-03-02 01:43:07'),
+(37, 1, 'Dana Point Marina', 'dana-point-marina', 'Dana Point marina — gateway to Southern California coast and whale watching excursions.', 1, 160.00, 'Dana Point', 'California', 'United States', '34399 Golden Lantern St', '92629', 33.46700000, -117.69810000, 'Dockmaster', 'info@danapointmarina.com', '+1 949 496 6135', 'https://danapointmarina.com', NULL, NULL, 700, 650, 80.00, 6.00, 1, 1, 1, '2026-03-02 01:43:07', '2026-03-02 01:43:07'),
+(38, 1, 'Annapolis Harbor Marina', 'annapolis-harbor-marina', 'Historic Chesapeake marina near downtown Annapolis and sailing facilities.', 1, 150.00, 'Annapolis', 'Maryland', 'United States', '80 Compromise St', '21401', 38.97840000, -76.49220000, 'Dockmaster', 'info@annapolismarina.com', '+1 410 555 0188', 'https://annapolismarina.com', NULL, NULL, 300, 270, 40.00, 4.50, 1, 0, 1, '2026-03-02 01:43:07', '2026-03-02 01:43:07');
 
 -- --------------------------------------------------------
 
@@ -709,7 +770,150 @@ INSERT INTO `marina_amenities` (`id`, `marina_id`, `amenity_id`, `created_at`) V
 (173, 14, 6, '2026-02-14 05:07:02'),
 (174, 14, 7, '2026-02-14 05:07:02'),
 (175, 14, 9, '2026-02-14 05:07:02'),
-(176, 14, 10, '2026-02-14 05:07:02');
+(176, 14, 10, '2026-02-14 05:07:02'),
+(201, 19, 1, '2026-03-02 01:43:07'),
+(202, 19, 2, '2026-03-02 01:43:07'),
+(203, 19, 3, '2026-03-02 01:43:07'),
+(204, 19, 4, '2026-03-02 01:43:07'),
+(205, 19, 5, '2026-03-02 01:43:07'),
+(206, 19, 6, '2026-03-02 01:43:07'),
+(207, 19, 7, '2026-03-02 01:43:07'),
+(208, 19, 8, '2026-03-02 01:43:07'),
+(209, 19, 9, '2026-03-02 01:43:07'),
+(210, 19, 10, '2026-03-02 01:43:07'),
+(211, 20, 1, '2026-03-02 01:43:07'),
+(212, 20, 2, '2026-03-02 01:43:07'),
+(213, 20, 3, '2026-03-02 01:43:07'),
+(214, 20, 4, '2026-03-02 01:43:07'),
+(215, 20, 5, '2026-03-02 01:43:07'),
+(216, 20, 6, '2026-03-02 01:43:07'),
+(217, 20, 7, '2026-03-02 01:43:07'),
+(218, 20, 8, '2026-03-02 01:43:07'),
+(219, 20, 10, '2026-03-02 01:43:07'),
+(220, 21, 1, '2026-03-02 01:43:07'),
+(221, 21, 2, '2026-03-02 01:43:07'),
+(222, 21, 3, '2026-03-02 01:43:07'),
+(223, 21, 4, '2026-03-02 01:43:07'),
+(224, 21, 5, '2026-03-02 01:43:07'),
+(225, 21, 6, '2026-03-02 01:43:07'),
+(226, 21, 7, '2026-03-02 01:43:07'),
+(227, 21, 8, '2026-03-02 01:43:07'),
+(228, 21, 10, '2026-03-02 01:43:07'),
+(229, 22, 1, '2026-03-02 01:43:07'),
+(230, 22, 2, '2026-03-02 01:43:07'),
+(231, 22, 3, '2026-03-02 01:43:07'),
+(232, 22, 4, '2026-03-02 01:43:07'),
+(233, 22, 5, '2026-03-02 01:43:07'),
+(234, 22, 6, '2026-03-02 01:43:07'),
+(235, 22, 7, '2026-03-02 01:43:07'),
+(236, 22, 8, '2026-03-02 01:43:07'),
+(237, 22, 10, '2026-03-02 01:43:07'),
+(238, 23, 1, '2026-03-02 01:43:07'),
+(239, 23, 2, '2026-03-02 01:43:07'),
+(240, 23, 3, '2026-03-02 01:43:07'),
+(241, 23, 4, '2026-03-02 01:43:07'),
+(242, 23, 5, '2026-03-02 01:43:07'),
+(243, 23, 6, '2026-03-02 01:43:07'),
+(244, 23, 7, '2026-03-02 01:43:07'),
+(245, 23, 8, '2026-03-02 01:43:07'),
+(246, 23, 10, '2026-03-02 01:43:07'),
+(247, 24, 2, '2026-03-02 01:43:07'),
+(248, 24, 3, '2026-03-02 01:43:07'),
+(249, 24, 5, '2026-03-02 01:43:07'),
+(250, 24, 10, '2026-03-02 01:43:07'),
+(251, 25, 1, '2026-03-02 01:43:07'),
+(252, 25, 2, '2026-03-02 01:43:07'),
+(253, 25, 3, '2026-03-02 01:43:07'),
+(254, 25, 5, '2026-03-02 01:43:07'),
+(255, 25, 6, '2026-03-02 01:43:07'),
+(256, 25, 7, '2026-03-02 01:43:07'),
+(257, 25, 10, '2026-03-02 01:43:07'),
+(258, 26, 1, '2026-03-02 01:43:07'),
+(259, 26, 2, '2026-03-02 01:43:07'),
+(260, 26, 3, '2026-03-02 01:43:07'),
+(261, 26, 4, '2026-03-02 01:43:07'),
+(262, 26, 5, '2026-03-02 01:43:07'),
+(263, 26, 6, '2026-03-02 01:43:07'),
+(264, 26, 8, '2026-03-02 01:43:07'),
+(265, 26, 10, '2026-03-02 01:43:07'),
+(266, 27, 2, '2026-03-02 01:43:07'),
+(267, 27, 3, '2026-03-02 01:43:07'),
+(268, 27, 5, '2026-03-02 01:43:07'),
+(269, 27, 6, '2026-03-02 01:43:07'),
+(270, 27, 10, '2026-03-02 01:43:07'),
+(271, 28, 2, '2026-03-02 01:43:07'),
+(272, 28, 3, '2026-03-02 01:43:07'),
+(273, 28, 5, '2026-03-02 01:43:07'),
+(274, 28, 10, '2026-03-02 01:43:07'),
+(275, 29, 1, '2026-03-02 01:43:07'),
+(276, 29, 2, '2026-03-02 01:43:07'),
+(277, 29, 3, '2026-03-02 01:43:07'),
+(278, 29, 4, '2026-03-02 01:43:07'),
+(279, 29, 5, '2026-03-02 01:43:07'),
+(280, 29, 6, '2026-03-02 01:43:07'),
+(281, 29, 7, '2026-03-02 01:43:07'),
+(282, 29, 8, '2026-03-02 01:43:07'),
+(283, 29, 9, '2026-03-02 01:43:07'),
+(284, 29, 10, '2026-03-02 01:43:07'),
+(285, 30, 1, '2026-03-02 01:43:07'),
+(286, 30, 2, '2026-03-02 01:43:07'),
+(287, 30, 3, '2026-03-02 01:43:07'),
+(288, 30, 4, '2026-03-02 01:43:07'),
+(289, 30, 5, '2026-03-02 01:43:07'),
+(290, 30, 6, '2026-03-02 01:43:07'),
+(291, 30, 7, '2026-03-02 01:43:07'),
+(292, 30, 8, '2026-03-02 01:43:07'),
+(293, 30, 10, '2026-03-02 01:43:07'),
+(294, 31, 1, '2026-03-02 01:43:07'),
+(295, 31, 2, '2026-03-02 01:43:07'),
+(296, 31, 3, '2026-03-02 01:43:07'),
+(297, 31, 4, '2026-03-02 01:43:07'),
+(298, 31, 5, '2026-03-02 01:43:07'),
+(299, 31, 6, '2026-03-02 01:43:07'),
+(300, 31, 8, '2026-03-02 01:43:07'),
+(301, 31, 10, '2026-03-02 01:43:07'),
+(302, 32, 1, '2026-03-02 01:43:07'),
+(303, 32, 2, '2026-03-02 01:43:07'),
+(304, 32, 3, '2026-03-02 01:43:07'),
+(305, 32, 10, '2026-03-02 01:43:07'),
+(306, 33, 1, '2026-03-02 01:43:07'),
+(307, 33, 2, '2026-03-02 01:43:07'),
+(308, 33, 3, '2026-03-02 01:43:07'),
+(309, 33, 4, '2026-03-02 01:43:07'),
+(310, 33, 5, '2026-03-02 01:43:07'),
+(311, 33, 8, '2026-03-02 01:43:07'),
+(312, 33, 10, '2026-03-02 01:43:07'),
+(313, 34, 1, '2026-03-02 01:43:07'),
+(314, 34, 2, '2026-03-02 01:43:07'),
+(315, 34, 3, '2026-03-02 01:43:07'),
+(316, 34, 5, '2026-03-02 01:43:07'),
+(317, 34, 7, '2026-03-02 01:43:07'),
+(318, 34, 10, '2026-03-02 01:43:07'),
+(319, 35, 1, '2026-03-02 01:43:07'),
+(320, 35, 2, '2026-03-02 01:43:07'),
+(321, 35, 4, '2026-03-02 01:43:07'),
+(322, 35, 5, '2026-03-02 01:43:07'),
+(323, 35, 10, '2026-03-02 01:43:07'),
+(324, 36, 2, '2026-03-02 01:43:07'),
+(325, 36, 3, '2026-03-02 01:43:07'),
+(326, 36, 5, '2026-03-02 01:43:07'),
+(327, 36, 10, '2026-03-02 01:43:07'),
+(328, 37, 1, '2026-03-02 01:43:07'),
+(329, 37, 2, '2026-03-02 01:43:07'),
+(330, 37, 3, '2026-03-02 01:43:07'),
+(331, 37, 4, '2026-03-02 01:43:07'),
+(332, 37, 5, '2026-03-02 01:43:07'),
+(333, 37, 6, '2026-03-02 01:43:07'),
+(334, 37, 7, '2026-03-02 01:43:07'),
+(335, 37, 8, '2026-03-02 01:43:07'),
+(336, 37, 10, '2026-03-02 01:43:07'),
+(337, 38, 1, '2026-03-02 01:43:07'),
+(338, 38, 2, '2026-03-02 01:43:07'),
+(339, 38, 3, '2026-03-02 01:43:07'),
+(340, 38, 5, '2026-03-02 01:43:07'),
+(341, 38, 6, '2026-03-02 01:43:07'),
+(342, 38, 7, '2026-03-02 01:43:07'),
+(343, 38, 10, '2026-03-02 01:43:07');
 
 -- --------------------------------------------------------
 
@@ -765,44 +969,27 @@ INSERT INTO `marina_features` (`id`, `marina_id`, `has_fuel_dock`, `has_pump_out
 (17, 11, 1, 1, 0, 1, 0, 0, NULL, 1, 0, '2026-02-14 05:07:02'),
 (18, 12, 1, 1, 1, 0, 0, 1, 200.00, 1, 1, '2026-02-14 05:07:02'),
 (19, 13, 1, 1, 0, 1, 1, 0, NULL, 1, 0, '2026-02-14 05:07:02'),
-(20, 14, 1, 1, 1, 0, 0, 1, 75.00, 1, 0, '2026-02-14 05:07:02');
-
--- --------------------------------------------------------
-
---
--- Table structure for table `marina_images`
---
-
-CREATE TABLE `marina_images` (
-  `id` int(10) UNSIGNED NOT NULL,
-  `marina_id` int(10) UNSIGNED NOT NULL,
-  `image_url` varchar(500) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `title` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `display_order` int(11) DEFAULT '0',
-  `is_primary` tinyint(1) DEFAULT '0',
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
---
--- Dumping data for table `marina_images`
---
-
-INSERT INTO `marina_images` (`id`, `marina_id`, `image_url`, `title`, `display_order`, `is_primary`, `created_at`) VALUES
-(41, 10, 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=800&h=600', 'Golden Gate Bridge View', 1, 1, '2026-02-14 05:07:02'),
-(42, 10, 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800&h=600', 'Marina Overview', 2, 0, '2026-02-14 05:07:02'),
-(43, 10, 'https://images.unsplash.com/photo-1565034946487-077786996e27?w=800&h=600', 'Dock Facilities', 3, 0, '2026-02-14 05:07:02'),
-(44, 11, 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600', 'Sunset Views', 1, 1, '2026-02-14 05:07:02'),
-(45, 11, 'https://images.unsplash.com/photo-1600298881974-6be191ceeda1?w=800&h=600', 'Marina Docks', 2, 0, '2026-02-14 05:07:02'),
-(46, 11, 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=800&h=600', 'Boat Ramp', 3, 0, '2026-02-14 05:07:02'),
-(47, 12, 'https://images.unsplash.com/photo-1582719471384-894fbb16e074?w=800&h=600', 'Luxury Yachts', 1, 1, '2026-02-14 05:07:02'),
-(48, 12, 'https://images.unsplash.com/photo-1586985564150-50bfde4ba669?w=800&h=600', 'Club Facilities', 2, 0, '2026-02-14 05:07:02'),
-(49, 12, 'https://images.unsplash.com/photo-1597149885569-564ccaa5dd9b?w=800&h=600', 'Premium Services', 3, 0, '2026-02-14 05:07:02'),
-(50, 13, 'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&h=600', 'Fishing Boats', 1, 1, '2026-02-14 05:07:02'),
-(51, 13, 'https://images.unsplash.com/photo-1544551763-77f98d6e4025?w=800&h=600', 'Marina Entrance', 2, 0, '2026-02-14 05:07:02'),
-(52, 13, 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600', 'Gulf Access', 3, 0, '2026-02-14 05:07:02'),
-(53, 14, 'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&h=600', 'Mountain Views', 1, 1, '2026-02-14 05:07:02'),
-(54, 14, 'https://images.unsplash.com/photo-1551946208-de362df5eb1a?w=800&h=600', 'Covered Slips', 2, 0, '2026-02-14 05:07:02'),
-(55, 14, 'https://images.unsplash.com/photo-1592506494411-a4eca6c3c5e1?w=800&h=600', 'Sailing Access', 3, 0, '2026-02-14 05:07:02');
+(20, 14, 1, 1, 1, 0, 0, 1, 75.00, 1, 0, '2026-02-14 05:07:02'),
+(25, 19, 1, 1, 1, 0, 0, 1, NULL, 1, 1, '2026-03-02 01:43:07'),
+(26, 20, 1, 1, 1, 0, 0, 1, NULL, 1, 1, '2026-03-02 01:43:07'),
+(27, 21, 1, 1, 1, 0, 1, 1, NULL, 1, 1, '2026-03-02 01:43:07'),
+(28, 22, 1, 1, 1, 0, 1, 1, NULL, 1, 1, '2026-03-02 01:43:07'),
+(29, 23, 1, 1, 1, 0, 1, 1, NULL, 1, 1, '2026-03-02 01:43:07'),
+(30, 24, 0, 1, 0, 0, 0, 0, NULL, 1, 0, '2026-03-02 01:43:07'),
+(31, 25, 1, 1, 0, 1, 0, 1, NULL, 1, 0, '2026-03-02 01:43:07'),
+(32, 26, 1, 1, 0, 1, 0, 1, NULL, 1, 0, '2026-03-02 01:43:07'),
+(33, 27, 0, 1, 0, 0, 0, 0, NULL, 1, 0, '2026-03-02 01:43:07'),
+(34, 28, 0, 1, 0, 0, 0, 0, NULL, 1, 0, '2026-03-02 01:43:07'),
+(35, 29, 1, 1, 1, 0, 1, 1, NULL, 1, 1, '2026-03-02 01:43:07'),
+(36, 30, 1, 1, 0, 1, 1, 1, NULL, 1, 0, '2026-03-02 01:43:07'),
+(37, 31, 1, 1, 0, 1, 1, 1, NULL, 1, 0, '2026-03-02 01:43:07'),
+(38, 32, 1, 1, 0, 0, 0, 0, NULL, 1, 0, '2026-03-02 01:43:07'),
+(39, 33, 1, 1, 0, 0, 0, 0, NULL, 1, 0, '2026-03-02 01:43:07'),
+(40, 34, 1, 1, 0, 0, 1, 0, NULL, 1, 1, '2026-03-02 01:43:07'),
+(41, 35, 1, 1, 0, 1, 0, 0, NULL, 1, 0, '2026-03-02 01:43:07'),
+(42, 36, 0, 1, 0, 0, 0, 0, NULL, 1, 0, '2026-03-02 01:43:07'),
+(43, 37, 1, 1, 1, 0, 1, 1, NULL, 1, 1, '2026-03-02 01:43:07'),
+(44, 38, 1, 1, 0, 1, 0, 1, NULL, 1, 0, '2026-03-02 01:43:07');
 
 -- --------------------------------------------------------
 
@@ -1109,7 +1296,27 @@ INSERT INTO `seabeds` (`id`, `marina_id`, `anchorage_id`, `seabed_type_id`, `des
 (29, 13, 15, 2, 'Muddy bottom with excellent holding characteristics', 6.00, 'Excellent holding, popular with fishing boats', '2026-02-14 05:17:07'),
 (30, 13, 16, 8, 'Mixed mud and sand bottom in protected bayou', 4.00, 'Good holding in calm conditions', '2026-02-14 05:17:07'),
 (31, 14, 17, 2, 'Deep mud bottom with excellent holding quality', 25.00, 'Excellent holding even in strong tidal currents', '2026-02-14 05:17:07'),
-(32, 14, 18, 6, 'Gravel and sand mix typical of Pacific Northwest', 35.00, 'Moderate holding, suitable for short stays', '2026-02-14 05:17:07');
+(32, 14, 18, 6, 'Gravel and sand mix typical of Pacific Northwest', 35.00, 'Moderate holding, suitable for short stays', '2026-02-14 05:17:07'),
+(36, 19, NULL, 1, 'Sandy seabed with strong holding.', 9.00, 'Deep-water access suitable for large yachts.', '2026-03-02 01:43:07'),
+(37, 20, NULL, 1, 'Sandy bottom near inlet.', 10.00, 'Good holding; exposed to ocean swells.', '2026-03-02 01:43:07'),
+(38, 21, NULL, 8, 'Mixed sand and mud, sheltered basin.', 6.50, 'Well-protected basin.', '2026-03-02 01:43:07'),
+(39, 22, NULL, 1, 'Mixed sand and mud bottom.', 8.50, 'Protected harbor basin.', '2026-03-02 01:43:07'),
+(40, 23, NULL, 1, 'Sandy shoal areas; protected inner harbor.', 7.00, 'Good holding inside harbor.', '2026-03-02 01:43:07'),
+(41, 24, NULL, 6, 'River mud/gravels typical of Hudson estuary.', 5.00, 'Tidal currents can be strong.', '2026-03-02 01:43:07'),
+(42, 25, NULL, 1, 'Sandy bottom, calm waters.', 5.00, 'Good protection from northerly winds.', '2026-03-02 01:43:07'),
+(43, 26, NULL, 1, 'Sandy channels with marked approach.', 6.00, 'Tidal range moderate.', '2026-03-02 01:43:07'),
+(44, 27, NULL, 1, 'Sheltered sandy bottom.', 6.00, 'Classic tidal harbor.', '2026-03-02 01:43:07'),
+(45, 28, NULL, 6, 'Rocky/sandy mix common to Maine coast.', 8.00, 'Seasonal winter closures possible.', '2026-03-02 01:43:07'),
+(46, 29, NULL, 1, 'Sandy seabed typical of Baja coast.', 10.00, 'Deep-water marina basin.', '2026-03-02 01:43:07'),
+(47, 30, NULL, 1, 'Sandy and mixed seabed.', 7.50, 'Protected marina channel.', '2026-03-02 01:43:07'),
+(48, 31, NULL, 1, 'Sandy bottom; good holding near channel.', 8.00, 'Close to tourist district.', '2026-03-02 01:43:07'),
+(49, 32, NULL, 8, 'Mixed sand and rock near bay entrance.', 7.00, 'Busy commercial approaches.', '2026-03-02 01:43:07'),
+(50, 33, NULL, 1, 'Sandy bottom; channel marked.', 6.00, 'Tropical conditions.', '2026-03-02 01:43:07'),
+(51, 34, NULL, 8, 'Mixed sand and silt in bay.', 9.00, 'Tidal currents moderate.', '2026-03-02 01:43:07'),
+(52, 35, NULL, 1, 'Sandy gulf approaches; dredged channel.', 4.00, 'Watch for weather.', '2026-03-02 01:43:07'),
+(53, 36, NULL, 6, 'Freshwater lake bottom, mixed gravels.', 6.00, 'Seasonal ice closure in winter.', '2026-03-02 01:43:07'),
+(54, 37, NULL, 1, 'Sandy basin with protected slips.', 9.00, 'Popular transient stop.', '2026-03-02 01:43:07'),
+(55, 38, NULL, 1, 'Sandy mud in upper bay approach.', 6.50, 'Shallow berths in some slips.', '2026-03-02 01:43:07');
 
 -- --------------------------------------------------------
 
@@ -1414,7 +1621,16 @@ INSERT INTO `user_sessions` (`id`, `user_id`, `verification_code`, `is_verified`
 (23, 7, '657798', 1, '2026-02-14 04:18:33', '2026-02-14 04:18:03'),
 (24, 7, '766860', 1, '2026-02-14 05:54:08', '2026-02-14 05:53:53'),
 (25, 7, '909805', 1, '2026-02-16 21:01:10', '2026-02-16 21:00:47'),
-(26, 7, '843596', 1, '2026-02-16 21:15:43', '2026-02-16 21:15:32');
+(26, 7, '843596', 1, '2026-02-16 21:15:43', '2026-02-16 21:15:32'),
+(27, 7, '630492', 1, '2026-02-18 02:03:03', '2026-02-18 02:02:46'),
+(28, 7, '511304', 1, '2026-02-18 02:07:09', '2026-02-18 02:06:56'),
+(29, 7, '832118', 1, '2026-02-18 02:52:47', '2026-02-18 02:52:32'),
+(30, 7, '537161', 1, '2026-02-18 05:36:09', '2026-02-18 05:35:58'),
+(31, 7, '375775', 1, '2026-02-18 05:47:34', '2026-02-18 05:47:21'),
+(32, 7, '555124', 1, '2026-02-18 06:13:32', '2026-02-18 06:13:20'),
+(33, 7, '147914', 1, '2026-02-27 02:14:50', '2026-02-27 02:14:35'),
+(34, 7, '599211', 1, '2026-02-27 23:33:08', '2026-02-27 23:32:54'),
+(35, 7, '401111', 1, '2026-02-27 23:41:44', '2026-02-27 23:41:31');
 
 -- --------------------------------------------------------
 
@@ -1757,6 +1973,12 @@ ALTER TABLE `coupons`
   ADD KEY `idx_validity` (`valid_from`,`valid_until`);
 
 --
+-- Indexes for table `environment_keys`
+--
+ALTER TABLE `environment_keys`
+  ADD PRIMARY KEY (`id`);
+
+--
 -- Indexes for table `faq_categories`
 --
 ALTER TABLE `faq_categories`
@@ -1839,7 +2061,8 @@ ALTER TABLE `marinas`
   ADD KEY `idx_city` (`city`),
   ADD KEY `idx_active` (`is_active`),
   ADD KEY `idx_featured` (`is_featured`),
-  ADD KEY `host_id` (`host_id`);
+  ADD KEY `host_id` (`host_id`),
+  ADD KEY `idx_directory_only` (`is_directory_only`);
 ALTER TABLE `marinas` ADD FULLTEXT KEY `idx_search` (`name`,`description`,`city`);
 
 --
@@ -1863,14 +2086,6 @@ ALTER TABLE `marina_business_types`
 ALTER TABLE `marina_features`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `unique_marina_features` (`marina_id`);
-
---
--- Indexes for table `marina_images`
---
-ALTER TABLE `marina_images`
-  ADD PRIMARY KEY (`id`),
-  ADD KEY `idx_marina` (`marina_id`),
-  ADD KEY `idx_primary` (`is_primary`);
 
 --
 -- Indexes for table `marina_pre_checkout_steps`
@@ -2126,7 +2341,7 @@ ALTER TABLE `anchorage_types`
 -- AUTO_INCREMENT for table `blocked_dates`
 --
 ALTER TABLE `blocked_dates`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=54;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `boats`
@@ -2144,7 +2359,7 @@ ALTER TABLE `boat_types`
 -- AUTO_INCREMENT for table `bookings`
 --
 ALTER TABLE `bookings`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=16;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=23;
 
 --
 -- AUTO_INCREMENT for table `cancellation_requests`
@@ -2162,7 +2377,13 @@ ALTER TABLE `content_pages`
 -- AUTO_INCREMENT for table `coupons`
 --
 ALTER TABLE `coupons`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+
+--
+-- AUTO_INCREMENT for table `environment_keys`
+--
+ALTER TABLE `environment_keys`
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
 -- AUTO_INCREMENT for table `faq_categories`
@@ -2198,25 +2419,25 @@ ALTER TABLE `home_visitors`
 -- AUTO_INCREMENT for table `hosts`
 --
 ALTER TABLE `hosts`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=12;
 
 --
 -- AUTO_INCREMENT for table `host_sessions`
 --
 ALTER TABLE `host_sessions`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=20;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=24;
 
 --
 -- AUTO_INCREMENT for table `marinas`
 --
 ALTER TABLE `marinas`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=16;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=39;
 
 --
 -- AUTO_INCREMENT for table `marina_amenities`
 --
 ALTER TABLE `marina_amenities`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=177;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=344;
 
 --
 -- AUTO_INCREMENT for table `marina_business_types`
@@ -2228,19 +2449,13 @@ ALTER TABLE `marina_business_types`
 -- AUTO_INCREMENT for table `marina_features`
 --
 ALTER TABLE `marina_features`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=21;
-
---
--- AUTO_INCREMENT for table `marina_images`
---
-ALTER TABLE `marina_images`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=56;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=45;
 
 --
 -- AUTO_INCREMENT for table `marina_pre_checkout_steps`
 --
 ALTER TABLE `marina_pre_checkout_steps`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `moorings`
@@ -2270,7 +2485,7 @@ ALTER TABLE `point_types`
 -- AUTO_INCREMENT for table `pre_checkout_step_fields`
 --
 ALTER TABLE `pre_checkout_step_fields`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=29;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `pre_checkout_temp_uploads`
@@ -2282,7 +2497,7 @@ ALTER TABLE `pre_checkout_temp_uploads`
 -- AUTO_INCREMENT for table `ratings`
 --
 ALTER TABLE `ratings`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `rating_categories`
@@ -2300,7 +2515,7 @@ ALTER TABLE `reviews`
 -- AUTO_INCREMENT for table `seabeds`
 --
 ALTER TABLE `seabeds`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=33;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=56;
 
 --
 -- AUTO_INCREMENT for table `seabed_types`
@@ -2324,7 +2539,7 @@ ALTER TABLE `slips`
 -- AUTO_INCREMENT for table `stripe_identity_verifications`
 --
 ALTER TABLE `stripe_identity_verifications`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=12;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `support_tickets`
@@ -2354,7 +2569,7 @@ ALTER TABLE `users`
 -- AUTO_INCREMENT for table `user_sessions`
 --
 ALTER TABLE `user_sessions`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=27;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=36;
 
 --
 -- AUTO_INCREMENT for table `visitor_checkout_events`
@@ -2481,12 +2696,6 @@ ALTER TABLE `marina_amenities`
 --
 ALTER TABLE `marina_features`
   ADD CONSTRAINT `marina_features_ibfk_1` FOREIGN KEY (`marina_id`) REFERENCES `marinas` (`id`) ON DELETE CASCADE;
-
---
--- Constraints for table `marina_images`
---
-ALTER TABLE `marina_images`
-  ADD CONSTRAINT `marina_images_ibfk_1` FOREIGN KEY (`marina_id`) REFERENCES `marinas` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `marina_pre_checkout_steps`

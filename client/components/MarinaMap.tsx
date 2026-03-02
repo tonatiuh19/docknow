@@ -6,9 +6,10 @@ import "leaflet/dist/leaflet.css";
 
 interface MarinaMapProps {
   marinas: Marina[];
+  userLocation?: [number, number] | null;
 }
 
-const MarinaMap: React.FC<MarinaMapProps> = ({ marinas }) => {
+const MarinaMap: React.FC<MarinaMapProps> = ({ marinas, userLocation }) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
@@ -57,8 +58,9 @@ const MarinaMap: React.FC<MarinaMapProps> = ({ marinas }) => {
         if (!isMounted) return;
 
         // Initialize map
-        const center = getMapCenter();
-        const map = L.map(mapRef.current).setView(center, 6);
+        const center = userLocation ?? getMapCenter();
+        const zoom = userLocation ? 10 : 6;
+        const map = L.map(mapRef.current).setView(center, zoom);
 
         // Add OpenStreetMap tiles
         L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -80,6 +82,26 @@ const MarinaMap: React.FC<MarinaMapProps> = ({ marinas }) => {
           iconAnchor: [16, 32],
           popupAnchor: [0, -32],
         });
+
+        // Add user location marker if available
+        if (userLocation) {
+          const userIcon = new L.Icon({
+            iconUrl:
+              "data:image/svg+xml;base64," +
+              btoa(`
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="28" height="28">
+                <circle cx="12" cy="12" r="10" fill="#0ea5e9" fill-opacity="0.25" stroke="#0ea5e9" stroke-width="1.5"/>
+                <circle cx="12" cy="12" r="5" fill="#0ea5e9"/>
+                <circle cx="12" cy="12" r="2.5" fill="white"/>
+              </svg>
+            `),
+            iconSize: [28, 28],
+            iconAnchor: [14, 14],
+          });
+          L.marker(userLocation, { icon: userIcon })
+            .bindPopup("<strong>You are here</strong>")
+            .addTo(map);
+        }
 
         // Add markers for marinas with coordinates
         const newMarkers: any[] = [];
@@ -231,8 +253,8 @@ const MarinaMap: React.FC<MarinaMapProps> = ({ marinas }) => {
 
         markersRef.current = newMarkers;
 
-        // Update map center if we have marinas
-        if (marinas.length > 0) {
+        // Update map center if we have marinas (only if user location not set)
+        if (marinas.length > 0 && !userLocation) {
           const center = getMapCenter();
           mapInstanceRef.current.setView(center, 6);
         }
@@ -243,6 +265,12 @@ const MarinaMap: React.FC<MarinaMapProps> = ({ marinas }) => {
 
     updateMarkers();
   }, [marinas]);
+
+  // Fly to user location when it becomes available after map init
+  useEffect(() => {
+    if (!userLocation || !mapInstanceRef.current) return;
+    mapInstanceRef.current.flyTo(userLocation, 10, { duration: 1.2 });
+  }, [userLocation]);
 
   return (
     <div

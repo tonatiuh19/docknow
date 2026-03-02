@@ -78,7 +78,7 @@ export const checkHostAuth = createAsyncThunk(
       const token = hostAuth.sessionToken;
 
       if (!token) {
-        return rejectWithValue("No authentication token");
+        return rejectWithValue(null);
       }
 
       const { data } = await axios.get("/api/host/me", {
@@ -155,7 +155,7 @@ const hostAuthSlice = createSlice({
         state.isAuthenticated = false;
         state.host = null;
         state.sessionToken = null;
-        state.error = action.payload as string;
+        state.error = action.payload ? (action.payload as string) : null;
       })
       // Logout host
       .addCase(logoutHost.fulfilled, (state) => {

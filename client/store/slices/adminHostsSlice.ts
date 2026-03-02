@@ -28,6 +28,8 @@ export interface CreateHostData {
   phone?: string;
   phoneCode?: string;
   countryCode?: string;
+  marinaId?: number | null;
+  role?: "primary" | "manager" | "staff";
 }
 
 export interface AssignHostData {

@@ -14,6 +14,7 @@ import adminBookingsReducer from "./slices/adminBookingsSlice";
 import adminPaymentsReducer from "./slices/adminPaymentsSlice";
 import adminHostsReducer from "./slices/adminHostsSlice";
 import adminMarinasReducer from "./slices/adminMarinasSlice";
+import hostOnboardingReducer from "./slices/hostOnboardingSlice";
 
 export const store = configureStore({
   reducer: {
@@ -30,6 +31,7 @@ export const store = configureStore({
     adminPayments: adminPaymentsReducer,
     adminHosts: adminHostsReducer,
     adminMarinas: adminMarinasReducer,
+    hostOnboarding: hostOnboardingReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

@@ -39,6 +39,7 @@ export interface MarinaDetail {
   max_boat_draft_meters?: number;
   is_active: boolean;
   is_featured: boolean;
+  isDirectoryOnly?: boolean; // true = public directory listing, not bookable on DockNow
   created_at: string;
   updated_at: string;
   business_type_name?: string;
@@ -81,7 +82,6 @@ export interface MarinaDetail {
     count: number;
   };
   images: Array<{
-    id: number;
     url: string;
     title: string;
     isPrimary: boolean;

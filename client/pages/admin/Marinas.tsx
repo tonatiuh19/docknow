@@ -28,14 +28,17 @@ import {
 } from "@/components/ui/table";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import {
+  deleteMarinaImage,
   fetchHostMarinaManagement,
   manageMarinaAnchorages,
+  manageMarinaImages,
   manageMarinaMoorings,
   manageMarinaPoints,
   manageMarinaSeabeds,
   manageMarinaSlips,
   saveMarinaAmenities,
   saveMarinaFeatures,
+  uploadMarinaImage,
   type MarinaManagementItem,
 } from "@/store/slices/adminMarinasSlice";
 
@@ -67,6 +70,7 @@ const EmptyState = ({ text }: { text: string }) => (
 type ModalSection =
   | "marina-features"
   | "amenities"
+  | "images"
   | "slips"
   | "anchorages"
   | "seabeds"
@@ -101,6 +105,49 @@ const SectionModalContent = ({
   onRefresh: () => void;
 }) => {
   const dispatch = useAppDispatch();
+  const [imageEdits, setImageEdits] = useState<
+    Record<number, { title: string; display_order: string }>
+  >({});
+  const [draggedImageId, setDraggedImageId] = useState<number | null>(null);
+
+  const getImageDraft = (image: MarinaManagementItem["images"][number]) => {
+    return (
+      imageEdits[image.id] || {
+        title: image.title || "",
+        display_order: String(image.display_order),
+      }
+    );
+  };
+
+  const sortedMarinaImages = [...marina.images].sort((a, b) => {
+    // Cover image (is_primary) always first
+    if (a.is_primary !== b.is_primary) return a.is_primary ? -1 : 1;
+    return a.id - b.id;
+  });
+
+  const handleDropReorder = async (targetImageId: number) => {
+    if (!draggedImageId || draggedImageId === targetImageId || saving) {
+      setDraggedImageId(null);
+      return;
+    }
+
+    const orderedIds = sortedMarinaImages.map((image) => image.id);
+    const fromIndex = orderedIds.indexOf(draggedImageId);
+    const toIndex = orderedIds.indexOf(targetImageId);
+
+    if (fromIndex < 0 || toIndex < 0) {
+      setDraggedImageId(null);
+      return;
+    }
+
+    orderedIds.splice(fromIndex, 1);
+    orderedIds.splice(toIndex, 0, draggedImageId);
+
+    // Note: image ordering is not persisted (gallery_image_urls array order
+    // reflects upload order). Drag-and-drop is visual only.
+    setDraggedImageId(null);
+    onRefresh();
+  };
 
   const featuresFormik = useFormik({
     enableReinitialize: true,
@@ -389,6 +436,37 @@ const SectionModalContent = ({
     },
   });
 
+  const imagesFormik = useFormik({
+    initialValues: {
+      title: "",
+      display_order: "0",
+      image_type: "extra",
+      file: null as File | null,
+    },
+    validationSchema: Yup.object({
+      title: Yup.string().max(255),
+      display_order: Yup.number().min(0).required("Display order is required"),
+      image_type: Yup.string().oneOf(["main", "extra"]).required(),
+      file: Yup.mixed().required("Image file is required"),
+    }),
+    onSubmit: async (values, { resetForm }) => {
+      if (!values.file) return;
+
+      await dispatch(
+        uploadMarinaImage({
+          marinaId: marina.id,
+          file: values.file,
+          imageType: values.image_type as "main" | "extra",
+          title: values.title || undefined,
+          displayOrder: Number(values.display_order),
+        }),
+      );
+
+      resetForm();
+      onRefresh();
+    },
+  });
+
   if (section === "marina-features") {
     return (
       <form onSubmit={featuresFormik.handleSubmit} className="space-y-4">
@@ -454,8 +532,213 @@ const SectionModalContent = ({
     );
   }
 
+  if (section === "images") {
+    return (
+      <div className="space-y-4">
+        <form onSubmit={imagesFormik.handleSubmit} className="space-y-3">
+          <Input
+            name="title"
+            placeholder="Image title (optional)"
+            value={imagesFormik.values.title}
+            onChange={imagesFormik.handleChange}
+          />
+          <Input
+            name="display_order"
+            type="number"
+            min={0}
+            placeholder="Display order"
+            value={imagesFormik.values.display_order}
+            onChange={imagesFormik.handleChange}
+          />
+          <select
+            name="image_type"
+            className="w-full h-10 px-3 rounded-md border border-slate-300"
+            value={imagesFormik.values.image_type}
+            onChange={imagesFormik.handleChange}
+          >
+            <option value="extra">Extra image</option>
+            <option value="main">Main image</option>
+          </select>
+          <Input
+            type="file"
+            accept="image/png,image/jpeg"
+            onChange={(event) => {
+              imagesFormik.setFieldValue(
+                "file",
+                event.currentTarget.files?.[0] || null,
+              );
+            }}
+          />
+          <DialogFooter>
+            <Button type="submit" disabled={saving}>
+              Upload Image
+            </Button>
+          </DialogFooter>
+        </form>
+
+        {marina.images.length > 0 ? (
+          <div className="space-y-2 max-h-[320px] overflow-auto pr-1">
+            {sortedMarinaImages.map((image) => (
+              <div
+                key={`marina-image-${image.id}`}
+                draggable={!saving}
+                onDragStart={() => setDraggedImageId(image.id)}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={async (event) => {
+                  event.preventDefault();
+                  await handleDropReorder(image.id);
+                }}
+                onDragEnd={() => setDraggedImageId(null)}
+                className={`rounded-lg border p-2 flex items-center gap-3 cursor-grab active:cursor-grabbing ${
+                  draggedImageId === image.id
+                    ? "border-ocean-400 bg-ocean-50"
+                    : "border-slate-200"
+                }`}
+              >
+                <img
+                  src={image.image_url}
+                  alt={image.title || "Marina image"}
+                  className="w-20 h-14 object-cover rounded-md border border-slate-200"
+                />
+                <div className="flex-1 min-w-0 space-y-1">
+                  <Input
+                    value={getImageDraft(image).title}
+                    onChange={(event) => {
+                      const draft = getImageDraft(image);
+                      setImageEdits((prev) => ({
+                        ...prev,
+                        [image.id]: {
+                          ...draft,
+                          title: event.target.value,
+                        },
+                      }));
+                    }}
+                    placeholder="Image title"
+                    className="h-8 text-xs"
+                  />
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      min={0}
+                      value={getImageDraft(image).display_order}
+                      onChange={(event) => {
+                        const draft = getImageDraft(image);
+                        setImageEdits((prev) => ({
+                          ...prev,
+                          [image.id]: {
+                            ...draft,
+                            display_order: event.target.value,
+                          },
+                        }));
+                      }}
+                      className="h-8 text-xs w-24"
+                    />
+                    <p className="text-[11px] text-navy-500 truncate">
+                      {image.is_primary ? "Primary" : "Extra"}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={saving}
+                      onClick={async () => {
+                        // Reordering not persisted; display only.
+                        onRefresh();
+                      }}
+                    >
+                      Up
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={saving}
+                      onClick={async () => {
+                        // Reordering not persisted; display only.
+                        onRefresh();
+                      }}
+                    >
+                      Down
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={saving}
+                      onClick={async () => {
+                        // Title editing not persisted (images stored as URLs only).
+                        onRefresh();
+                      }}
+                    >
+                      Save
+                    </Button>
+                  </div>
+
+                  {!image.is_primary && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={saving}
+                      onClick={async () => {
+                        await dispatch(
+                          manageMarinaImages({
+                            action: "create",
+                            marinaId: marina.id,
+                            image: {
+                              image_url: image.image_url,
+                              is_primary: true,
+                            },
+                          }),
+                        );
+                        onRefresh();
+                      }}
+                    >
+                      Set Primary
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={saving}
+                    onClick={async () => {
+                      await dispatch(
+                        deleteMarinaImage({
+                          marinaId: marina.id,
+                          imageUrl: image.image_url,
+                        }),
+                      );
+                      onRefresh();
+                    }}
+                  >
+                    Delete
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState text="No images configured." />
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" type="button" onClick={onClose}>
+            Close
+          </Button>
+        </DialogFooter>
+      </div>
+    );
+  }
+
   const sectionMap: Record<
-    Exclude<ModalSection, "marina-features" | "amenities">,
+    Exclude<ModalSection, "marina-features" | "amenities" | "images">,
     { formik: any; idLabel: string; idField: string }
   > = {
     slips: { formik: slipsFormik, idLabel: "Slip ID", idField: "slipId" },
@@ -813,6 +1096,50 @@ const AdminMarinas = () => {
                           <EmptyState text="No amenities configured." />
                         )}
                       </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm font-semibold text-navy-900">
+                          Images ({marina.images.length})
+                        </p>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            setActiveModal({
+                              marinaId: marina.id,
+                              marinaName: marina.name,
+                              section: "images",
+                            })
+                          }
+                        >
+                          Manage
+                        </Button>
+                      </div>
+
+                      {marina.images.length > 0 ? (
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                          {marina.images.slice(0, 8).map((image) => (
+                            <div
+                              key={`${marina.id}-image-${image.id}`}
+                              className="rounded-lg border border-slate-200 p-1.5"
+                            >
+                              <img
+                                src={image.image_url}
+                                alt={image.title || `Marina image ${image.id}`}
+                                className="w-full h-20 object-cover rounded-md"
+                              />
+                              <p className="text-[10px] text-navy-600 mt-1 truncate">
+                                {image.title ||
+                                  (image.is_primary ? "Primary" : "Extra")}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <EmptyState text="No images configured." />
+                      )}
                     </div>
 
                     <div>

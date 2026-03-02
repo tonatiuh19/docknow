@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import Layout from "@/components/Layout";
 import MetaHelmet from "@/components/MetaHelmet";
 import { Button } from "@/components/ui/button";
@@ -72,6 +72,7 @@ import {
 
 const Discover = () => {
   const dispatch = useAppDispatch();
+  const [urlSearchParams] = useSearchParams();
 
   // Redux selectors
   const { marinas, viewType, loading } = useAppSelector(
@@ -113,11 +114,43 @@ const Discover = () => {
   const [localSelectedMarinaFeatures, setLocalSelectedMarinaFeatures] =
     useState<string[]>([]);
 
-  // Load initial data
+  // Load initial data and handle URL parameters
   useEffect(() => {
     dispatch(fetchMarinaFilters());
-    dispatch(fetchMarinas({}));
-  }, [dispatch]);
+
+    // Check for URL search parameters
+    const searchTerm = urlSearchParams.get("searchTerm");
+    const checkIn = urlSearchParams.get("checkIn");
+    const minBoatLength = urlSearchParams.get("minBoatLength");
+
+    if (searchTerm || checkIn || minBoatLength) {
+      // If URL params exist, populate search and execute
+      const searchData: any = {};
+
+      if (searchTerm) {
+        searchData.searchTerm = searchTerm;
+        setLocalSearchQuery(searchTerm);
+      }
+      if (checkIn) {
+        searchData.checkIn = checkIn;
+        setLocalCheckIn(checkIn);
+      }
+      if (minBoatLength) {
+        const boatLength = parseFloat(minBoatLength);
+        searchData.minBoatLength = boatLength;
+        setLocalBoatLength([boatLength]);
+      }
+
+      searchData.limit = 20;
+      searchData.offset = 0;
+
+      dispatch(updateSearchParams(searchData));
+      dispatch(searchMarinas(searchData));
+    } else {
+      // Load all marinas if no search params
+      dispatch(fetchMarinas({}));
+    }
+  }, [dispatch, urlSearchParams]);
 
   // Sync local form with Redux store
   useEffect(() => {

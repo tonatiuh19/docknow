@@ -3,8 +3,13 @@ import MetaHelmet from "@/components/MetaHelmet";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Link } from "react-router-dom";
-import { motion } from "framer-motion";
+import { Link, useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import { useState, useEffect } from "react";
+import MarinaMap from "@/components/MarinaMap";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { fetchMarinas } from "@/store/slices/discoverySlice";
+import { selectDiscoveryViewData } from "@/store/selectors/discoverySelectors";
 import {
   MapPin,
   Calendar,
@@ -25,9 +30,80 @@ import {
   SmartphoneIcon,
   Apple,
   PlayCircle,
+  Navigation,
+  LocateFixed,
+  X,
+  Lock,
 } from "lucide-react";
 
 const Index = () => {
+  const navigate = useNavigate();
+  const dispatch = useAppDispatch();
+  const { marinas, loading: marinasLoading } = useAppSelector(
+    selectDiscoveryViewData,
+  );
+
+  const [useVideoBackground, setUseVideoBackground] = useState(true);
+  const [videoLoaded, setVideoLoaded] = useState(false);
+
+  // Location state
+  type LocationStatus = "idle" | "requesting" | "granted" | "denied";
+  const [locationStatus, setLocationStatus] = useState<LocationStatus>("idle");
+  const [userLocation, setUserLocation] = useState<[number, number] | null>(
+    null,
+  );
+  const [locationDismissed, setLocationDismissed] = useState(false);
+
+  // Search form state
+  const [searchLocation, setSearchLocation] = useState("Bahamas");
+  const [checkInDate, setCheckInDate] = useState("");
+  const [boatSize, setBoatSize] = useState("");
+
+  useEffect(() => {
+    // Fallback to image if video doesn't load within 3 seconds
+    const timeout = setTimeout(() => {
+      if (!videoLoaded) {
+        setUseVideoBackground(false);
+      }
+    }, 3000);
+
+    return () => clearTimeout(timeout);
+  }, [videoLoaded]);
+
+  // Fetch featured marinas for the map
+  useEffect(() => {
+    dispatch(fetchMarinas({ limit: 10, featured: true }));
+  }, [dispatch]);
+
+  // Handle search submission
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const params = new URLSearchParams();
+    if (searchLocation) params.append("searchTerm", searchLocation);
+    if (checkInDate) params.append("checkIn", checkInDate);
+    if (boatSize) params.append("minBoatLength", boatSize);
+
+    navigate(`/discover?${params.toString()}`);
+  };
+
+  const handleRequestLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationStatus("denied");
+      return;
+    }
+    setLocationStatus("requesting");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setUserLocation([pos.coords.latitude, pos.coords.longitude]);
+        setLocationStatus("granted");
+      },
+      () => {
+        setLocationStatus("denied");
+      },
+      { timeout: 8000 },
+    );
+  };
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: {
@@ -89,6 +165,35 @@ const Index = () => {
       />
       {/* Hero Section */}
       <section className="relative overflow-hidden bg-gradient-hero pt-32 pb-16 lg:pt-48 lg:pb-32">
+        {/* Video/Image Background */}
+        {useVideoBackground ? (
+          <video
+            autoPlay
+            loop
+            muted
+            playsInline
+            onLoadedData={() => setVideoLoaded(true)}
+            onError={() => setUseVideoBackground(false)}
+            className="absolute inset-0 w-full h-full object-cover opacity-30"
+          >
+            <source
+              src="https://garbrix.com/navios/assets/videos/dock_now.mp4"
+              type="video/mp4"
+            />
+          </video>
+        ) : (
+          <div
+            className="absolute inset-0 w-full h-full bg-cover bg-center opacity-30"
+            style={{
+              backgroundImage:
+                "url('https://images.pexels.com/photos/1118877/pexels-photo-1118877.jpeg?auto=compress&cs=tinysrgb&w=1920')",
+            }}
+          />
+        )}
+
+        {/* Gradient Overlay */}
+        <div className="absolute inset-0 bg-gradient-to-br from-navy-950/90 via-ocean-900/80 to-navy-950/90" />
+
         {/* Animated Background Elements */}
         <motion.div
           animate={{
@@ -150,7 +255,7 @@ const Index = () => {
               <motion.div variants={itemVariants}>
                 <Card className="p-2 shadow-2xl border-none bg-white/10 backdrop-blur-xl ring-1 ring-white/20">
                   <div className="bg-white rounded-2xl p-6 shadow-inner">
-                    <div className="space-y-4">
+                    <form onSubmit={handleSearch} className="space-y-4">
                       <div className="grid md:grid-cols-3 gap-6">
                         <div className="space-y-2">
                           <label className="text-xs font-bold uppercase tracking-wider text-navy-400">
@@ -161,7 +266,10 @@ const Index = () => {
                             <Input
                               placeholder="Search ports..."
                               className="pl-10 border-none bg-navy-50/50 focus-visible:ring-ocean-500 h-12 rounded-xl"
-                              defaultValue="Bahamas"
+                              value={searchLocation}
+                              onChange={(e) =>
+                                setSearchLocation(e.target.value)
+                              }
                             />
                           </div>
                         </div>
@@ -176,31 +284,35 @@ const Index = () => {
                               placeholder="Select date"
                               className="pl-10 border-none bg-navy-50/50 focus-visible:ring-ocean-500 h-12 rounded-xl"
                               type="date"
+                              value={checkInDate}
+                              onChange={(e) => setCheckInDate(e.target.value)}
                             />
                           </div>
                         </div>
 
                         <div className="space-y-2">
                           <label className="text-xs font-bold uppercase tracking-wider text-navy-400">
-                            Boat Size
+                            Boat Size (ft)
                           </label>
                           <Input
-                            placeholder="Select size"
+                            placeholder="e.g., 30"
                             className="border-none bg-navy-50/50 focus-visible:ring-ocean-500 h-12 rounded-xl"
+                            type="number"
+                            min="0"
+                            value={boatSize}
+                            onChange={(e) => setBoatSize(e.target.value)}
                           />
                         </div>
                       </div>
 
                       <Button
+                        type="submit"
                         className="w-full bg-gradient-ocean hover:shadow-glow text-white h-14 text-lg font-bold border-none rounded-xl transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
-                        asChild
                       >
-                        <Link to="/discover">
-                          <Search className="w-5 h-5 mr-2" />
-                          Explore Now
-                        </Link>
+                        <Search className="w-5 h-5 mr-2" />
+                        Explore Now
                       </Button>
-                    </div>
+                    </form>
                   </div>
                 </Card>
               </motion.div>
@@ -231,38 +343,160 @@ const Index = () => {
               </motion.div>
             </motion.div>
 
-            {/* Right Side - Interactive Element */}
+            {/* Right Side - Live Marina Map */}
             <motion.div
               initial={{ opacity: 0, x: 50, scale: 0.9 }}
               animate={{ opacity: 1, x: 0, scale: 1 }}
               transition={{ duration: 1, delay: 0.4 }}
               className="relative hidden lg:block"
             >
-              <div className="bg-white/10 backdrop-blur-md rounded-[2.5rem] p-4 ring-1 ring-white/20 shadow-2xl overflow-hidden group">
-                <div className="bg-navy-950 rounded-[2rem] h-[600px] flex items-center justify-center relative overflow-hidden">
-                  <motion.div
-                    animate={{ scale: [1, 1.05, 1] }}
-                    transition={{ duration: 10, repeat: Infinity }}
-                    className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1507525428034-b723cf961d3e?ixlib=rb-1.2.1&auto=format&fit=crop&w=1353&q=80')] bg-cover bg-center opacity-40 group-hover:scale-110 transition-transform duration-700"
-                  />
-                  <div className="relative text-center p-8">
-                    <motion.div
-                      animate={{ y: [0, -10, 0] }}
-                      transition={{ duration: 4, repeat: Infinity }}
-                      className="w-24 h-24 bg-gradient-ocean rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-glow rotate-12"
-                    >
-                      <MapPin className="w-12 h-12 text-white" />
-                    </motion.div>
-                    <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-6 shadow-2xl">
-                      <div className="flex items-center justify-center gap-3 text-sm text-ocean-200 mb-3">
-                        <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(74,222,128,0.8)]"></span>
-                        Live Map View
+              <div className="bg-white/10 backdrop-blur-md rounded-[2.5rem] p-4 ring-1 ring-white/20 shadow-2xl overflow-hidden">
+                <div className="bg-white rounded-[2rem] h-[600px] flex flex-col relative overflow-hidden">
+                  {/* Map Header */}
+                  <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-white via-white to-transparent p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(74,222,128,0.8)]"></span>
+                          <span className="text-sm font-bold text-navy-600">
+                            Live Map
+                          </span>
+                        </div>
+                        <h3 className="text-2xl font-bold text-navy-900">
+                          Featured Marinas
+                        </h3>
                       </div>
-                      <p className="font-bold text-2xl text-white mb-2">
-                        Coming Very Soon
-                      </p>
-                      <p className="text-ocean-100/60 text-sm max-w-[200px]">
-                        Track your vessel and explore ports in real-time.
+                      <Link
+                        to="/discover"
+                        className="px-4 py-2 bg-gradient-ocean text-white rounded-xl text-sm font-bold hover:shadow-lg transition-all"
+                      >
+                        View All
+                      </Link>
+                    </div>
+
+                    {/* Location prompt */}
+                    <AnimatePresence>
+                      {locationStatus === "idle" && !locationDismissed && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -8, height: 0 }}
+                          animate={{ opacity: 1, y: 0, height: "auto" }}
+                          exit={{ opacity: 0, y: -8, height: 0 }}
+                          transition={{ duration: 0.25 }}
+                          className="mt-3 flex items-center gap-2 bg-ocean-50 border border-ocean-200 rounded-xl px-3 py-2"
+                        >
+                          <Navigation className="w-4 h-4 text-ocean-600 shrink-0" />
+                          <p className="text-xs text-ocean-700 font-medium flex-1">
+                            Show marinas near you?
+                          </p>
+                          <button
+                            onClick={handleRequestLocation}
+                            className="text-xs font-bold text-white bg-ocean-500 hover:bg-ocean-600 px-3 py-1 rounded-lg transition-colors shrink-0"
+                          >
+                            Use my location
+                          </button>
+                          <button
+                            onClick={() => setLocationDismissed(true)}
+                            className="text-navy-400 hover:text-navy-600 transition-colors"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </motion.div>
+                      )}
+                      {locationStatus === "requesting" && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="mt-3 flex items-center gap-2 bg-ocean-50 border border-ocean-200 rounded-xl px-3 py-2"
+                        >
+                          <motion.div
+                            animate={{ rotate: 360 }}
+                            transition={{
+                              duration: 1,
+                              repeat: Infinity,
+                              ease: "linear",
+                            }}
+                          >
+                            <LocateFixed className="w-4 h-4 text-ocean-600" />
+                          </motion.div>
+                          <p className="text-xs text-ocean-700 font-medium">
+                            Detecting your location…
+                          </p>
+                        </motion.div>
+                      )}
+                      {locationStatus === "granted" && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="mt-3 flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-3 py-2"
+                        >
+                          <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />
+                          <p className="text-xs text-green-700 font-medium">
+                            Showing marinas near your location
+                          </p>
+                        </motion.div>
+                      )}
+                      {locationStatus === "denied" && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="mt-3 flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2"
+                        >
+                          <MapPin className="w-4 h-4 text-red-500 shrink-0" />
+                          <p className="text-xs text-red-600 font-medium">
+                            Location access denied — showing global marinas
+                          </p>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                  {/* Interactive Map */}
+                  <div className="flex-1 relative">
+                    {marinasLoading ? (
+                      <div className="absolute inset-0 flex items-center justify-center bg-navy-50">
+                        <div className="text-center">
+                          <motion.div
+                            animate={{ rotate: 360 }}
+                            transition={{
+                              duration: 2,
+                              repeat: Infinity,
+                              ease: "linear",
+                            }}
+                            className="w-12 h-12 border-4 border-ocean-200 border-t-ocean-600 rounded-full mx-auto mb-4"
+                          />
+                          <p className="text-navy-600 font-medium">
+                            Loading marinas...
+                          </p>
+                        </div>
+                      </div>
+                    ) : marinas.length > 0 ? (
+                      <MarinaMap
+                        marinas={marinas}
+                        userLocation={userLocation}
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center bg-navy-50">
+                        <div className="text-center p-8">
+                          <MapPin className="w-16 h-16 text-navy-300 mx-auto mb-4" />
+                          <p className="text-navy-600 font-medium">
+                            No marinas found
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Map Footer Info */}
+                  <div className="absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-white via-white to-transparent p-6">
+                    <div className="bg-white/90 backdrop-blur-sm rounded-xl p-4 border border-navy-100 shadow-lg">
+                      <p className="text-sm text-navy-600 text-center">
+                        <span className="font-bold text-ocean-600">
+                          {marinas.length}
+                        </span>{" "}
+                        marinas ready to welcome you
                       </p>
                     </div>
                   </div>
@@ -560,16 +794,18 @@ const Index = () => {
             >
               <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/5 rounded-full text-ocean-400 font-bold text-sm mb-4 border border-white/10">
                 <LayoutDashboard className="w-4 h-4" />
-                For Marina Managers
+                For Marinas &amp; Private Ports
               </div>
               <h2 className="text-4xl md:text-5xl font-bold text-white leading-tight">
-                Complete CRM for{" "}
-                <span className="text-ocean-400">Modern Marinas.</span>
+                The All-in-One Platform for{" "}
+                <span className="text-ocean-400">
+                  Modern Marinas &amp; Private Ports.
+                </span>
               </h2>
               <p className="text-xl text-navy-300 leading-relaxed">
-                Empower your staff and delight your guests with our all-in-one
-                management suite. From real-time occupancy tracking to automated
-                billing and guest communication.
+                Whether you run a full-service marina or a private port, DockNow
+                gives you the tools to manage occupancy, automate billing, and
+                delight every guest — all from one powerful dashboard.
               </p>
 
               <div className="space-y-4 py-6">
@@ -610,8 +846,14 @@ const Index = () => {
                 ))}
               </div>
 
-              <Button className="h-14 px-10 rounded-xl bg-ocean-500 hover:bg-ocean-600 text-white border-none text-lg font-bold transition-all shadow-xl shadow-ocean-500/20">
-                Request a Demo
+              <Button
+                className="h-14 px-10 rounded-xl bg-ocean-500 hover:bg-ocean-600 text-white border-none text-lg font-bold transition-all shadow-xl shadow-ocean-500/20 flex items-center gap-2"
+                asChild
+              >
+                <Link to="/become-a-member">
+                  <Lock className="w-5 h-5" />
+                  Become a Member
+                </Link>
               </Button>
             </motion.div>
 

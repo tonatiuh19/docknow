@@ -1,0 +1,3717 @@
+openapi: 3.0.3
+info:
+  title: DockNow API
+  description: |
+    REST API for the DockNow marina booking platform.
+
+    ## Authentication
+    There are two separate JWT bearer schemes:
+    - **UserAuth** – issued to guests/users after verifying their email code.
+    - **HostAuth** – issued to marina hosts after verifying their email code.
+
+    Pass the token in the `Authorization` header as `Bearer <token>`.
+
+    ## Stripe Key Strategy
+
+    DockNow uses a **split Stripe key model** depending on the client type:
+
+    ### Web (Browser)
+    The server reads Stripe keys directly from **server-side environment variables**:
+    - `STRIPE_SECRET_KEY` — used server-side to create payment intents, handle webhooks, etc.
+    - `STRIPE_PUBLISHABLE_KEY` — may be embedded at build time or served via the config endpoint.
+    - `STRIPE_WEBHOOK_SECRET` — used to validate incoming Stripe webhook signatures.
+
+    These variables are set in the hosting environment (Vercel / Netlify) and are **never** exposed to the browser directly.
+
+    ### App (Mobile)
+    Mobile clients **cannot** read server environment variables. Instead they call:
+    ```
+    GET /api/payments/config
+    ```
+    which looks up the Stripe **publishable** key from the `environment_keys` database table,
+    selecting the correct row based on whether the server is running in test or production mode
+    (`NODE_ENV !== 'production'` → `is_test = 1`).
+
+    The `environment_keys` table (managed via `GET/POST/DELETE /api/admin/environment-keys`) stores
+    four Stripe rows by default:
+
+    | id | title  | type        | is_test | purpose                          |
+    |----|--------|-------------|---------|----------------------------------|
+    | 1  | stripe | publishable | 1       | Test/sandbox publishable key     |
+    | 2  | stripe | secret      | 1       | Test/sandbox secret key          |
+    | 3  | stripe | publishable | 0       | Live/production publishable key  |
+    | 4  | stripe | secret      | 0       | Live/production secret key       |
+
+    > **Note:** Secret keys stored in the DB are masked (all but the last 4 characters replaced
+    > with `*`) when returned by the list endpoint. They are used server-side only.
+  version: 1.0.0
+  contact:
+    email: support@docknow.app
+
+servers:
+  - url: /api
+    description: Relative API base (same-origin via Vite proxy / Vercel)
+
+# ─── Security Schemes ──────────────────────────────────────────────────────────
+components:
+  securitySchemes:
+    UserAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token issued to authenticated users/guests.
+    HostAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token issued to authenticated marina hosts.
+    GuestAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token issued to authenticated guests (alias of UserAuth used for some routes).
+
+  # ─── Reusable Schemas ──────────────────────────────────────────────────────
+  schemas:
+    SuccessBoolean:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: "Human-readable error message"
+        message:
+          type: string
+
+    # ── Auth ─────────────────────────────────────────────────────────────────
+    UserPublic:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+        date_of_birth:
+          type: string
+          format: date
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        phone_code:
+          type: string
+          nullable: true
+        country_code:
+          type: string
+          nullable: true
+        profile_image_url:
+          type: string
+          nullable: true
+        user_type:
+          type: string
+          example: guest
+        stripe_customer_id:
+          type: string
+          nullable: true
+        general_notifications:
+          type: boolean
+        marketing_notifications:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    HostPublic:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+        phone:
+          type: string
+          nullable: true
+        phone_code:
+          type: string
+          nullable: true
+        country_code:
+          type: string
+          nullable: true
+        profile_image_url:
+          type: string
+          nullable: true
+        company_name:
+          type: string
+          nullable: true
+        is_active:
+          type: boolean
+        email_verified:
+          type: boolean
+        role:
+          type: string
+          enum: [primary, manager]
+        marina_id:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # ── Boats ─────────────────────────────────────────────────────────────────
+    BoatType:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    Boat:
+      type: object
+      properties:
+        id:
+          type: integer
+        boat_name:
+          type: string
+        boat_type:
+          type: string
+        boat_type_id:
+          type: integer
+          nullable: true
+        manufacturer:
+          type: string
+          nullable: true
+        model:
+          type: string
+          nullable: true
+        year:
+          type: integer
+          nullable: true
+        length_meters:
+          type: number
+          format: float
+        width_meters:
+          type: number
+          format: float
+        draft_meters:
+          type: number
+          format: float
+        home_marina:
+          type: string
+          nullable: true
+        registration_number:
+          type: string
+          nullable: true
+        insurance_provider:
+          type: string
+          nullable: true
+        insurance_policy_number:
+          type: string
+          nullable: true
+
+    # ── Bookings ──────────────────────────────────────────────────────────────
+    BookingBase:
+      type: object
+      properties:
+        id:
+          type: integer
+        checkInDate:
+          type: string
+          format: date
+        checkOutDate:
+          type: string
+          format: date
+        totalDays:
+          type: integer
+        pricePerDay:
+          type: number
+          format: float
+        subtotal:
+          type: number
+          format: float
+        serviceFee:
+          type: number
+          format: float
+        discountAmount:
+          type: number
+          format: float
+        totalAmount:
+          type: number
+          format: float
+        couponCode:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [pending, confirmed, cancelled, completed]
+        stripePaymentIntentId:
+          type: string
+          nullable: true
+        cancelledAt:
+          type: string
+          format: date-time
+          nullable: true
+        cancellationReason:
+          type: string
+          nullable: true
+        specialRequests:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        marina:
+          type: object
+          properties:
+            id:
+              type: integer
+            name:
+              type: string
+            slug:
+              type: string
+            city:
+              type: string
+            state:
+              type: string
+              nullable: true
+        slip:
+          type: object
+          nullable: true
+          properties:
+            number:
+              type: string
+        boat:
+          type: object
+          properties:
+            id:
+              type: integer
+            name:
+              type: string
+
+    # ── Marina ────────────────────────────────────────────────────────────────
+    MarinaImage:
+      type: object
+      description: Image derived from cover_image_url / gallery_image_urls columns on the marinas table
+      properties:
+        url:
+          type: string
+        title:
+          type: string
+          nullable: true
+        isPrimary:
+          type: boolean
+
+    MarinaDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        slug:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        pricePerDay:
+          type: number
+          format: float
+        location:
+          type: object
+          properties:
+            city:
+              type: string
+            state:
+              type: string
+              nullable: true
+            country:
+              type: string
+            address:
+              type: string
+              nullable: true
+            postalCode:
+              type: string
+              nullable: true
+            coordinates:
+              type: object
+              properties:
+                latitude:
+                  type: number
+                longitude:
+                  type: number
+        contact:
+          type: object
+          properties:
+            name:
+              type: string
+            email:
+              type: string
+            phone:
+              type: string
+            website:
+              type: string
+        capacity:
+          type: object
+          properties:
+            totalSlips:
+              type: integer
+            availableSlips:
+              type: integer
+            maxBoatLength:
+              type: number
+            maxBoatWidth:
+              type: number
+            maxBoatDraft:
+              type: number
+        businessType:
+          type: object
+          properties:
+            name:
+              type: string
+        isFeatured:
+          type: boolean
+        isDirectoryOnly:
+          type: boolean
+          description: >
+            When true this is a publicly-sourced directory entry.
+            The marina is not registered with DockNow and cannot be booked
+            through the platform. The UI will display an informational banner
+            and hide the booking widget.
+        rating:
+          type: object
+          properties:
+            average:
+              type: string
+            count:
+              type: integer
+        images:
+          type: array
+          items:
+            $ref: "#/components/schemas/MarinaImage"
+        amenities:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              name:
+                type: string
+              icon:
+                type: string
+              category:
+                type: string
+
+    # ── Slip ─────────────────────────────────────────────────────────────────
+    AvailableSlip:
+      type: object
+      properties:
+        id:
+          type: integer
+        marinaId:
+          type: integer
+        slipNumber:
+          type: string
+        lengthMeters:
+          type: number
+        widthMeters:
+          type: number
+        depthMeters:
+          type: number
+        pricePerDay:
+          type: number
+        hasPower:
+          type: boolean
+        hasWater:
+          type: boolean
+        isAvailable:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    # ── FAQ ───────────────────────────────────────────────────────────────────
+    FAQCategory:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+          nullable: true
+        icon:
+          type: string
+          nullable: true
+        order_index:
+          type: integer
+        question_count:
+          type: integer
+
+    FAQQuestion:
+      type: object
+      properties:
+        id:
+          type: integer
+        question:
+          type: string
+        answer:
+          type: string
+        slug:
+          type: string
+        views_count:
+          type: integer
+        helpful_count:
+          type: integer
+        not_helpful_count:
+          type: integer
+        is_featured:
+          type: boolean
+        category_id:
+          type: integer
+        category_name:
+          type: string
+        category_slug:
+          type: string
+
+    # ── Support ───────────────────────────────────────────────────────────────
+    SupportTicket:
+      type: object
+      properties:
+        id:
+          type: integer
+        ticket_number:
+          type: string
+          example: TKT-XXXXXXXX-XXXXX
+        subject:
+          type: string
+        category:
+          type: string
+        priority:
+          type: string
+          enum: [low, medium, high, urgent]
+        status:
+          type: string
+          enum: [open, in_progress, resolved, closed]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    # ── Environment Keys ──────────────────────────────────────────────────────
+    # Rows in the `environment_keys` table are used by **mobile/app clients** to
+    # retrieve Stripe keys at runtime (web clients use server env vars instead).
+    EnvironmentKey:
+      type: object
+      description: |
+        A single row from the `environment_keys` table.
+
+        **Purpose:** Mobile/app clients cannot access server environment variables.
+        They call `GET /api/payments/config` which reads the Stripe publishable key
+        from this table. The admin CRUD endpoints manage these rows so that keys can
+        be rotated without a server re-deploy.
+
+        **Key selection logic:** The server picks the row matching
+        `title = 'stripe'`, `type = 'publishable'`, and `is_test` based on
+        `NODE_ENV` (`1` in non-production, `0` in production).
+      properties:
+        id:
+          type: integer
+          example: 1
+        title:
+          type: string
+          description: "Service name (e.g. 'stripe')"
+          example: stripe
+        type:
+          type: string
+          description: "Key type: publishable | secret | webhook"
+          enum: [publishable, secret, webhook]
+          example: publishable
+        key_string:
+          type: string
+          description: |
+            The actual key value.
+            When returned by the list endpoint (`GET /admin/environment-keys`),
+            secret values are masked — only the last 4 characters are visible
+            (e.g. `****************************abcd`).
+          example: "****************************abcd"
+        is_test:
+          type: integer
+          enum: [0, 1]
+          description: "1 = test/sandbox key (used when NODE_ENV !== 'production'), 0 = live/production key"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # ── Pre-Checkout Steps ────────────────────────────────────────────────────
+    PreCheckoutStepField:
+      type: object
+      properties:
+        id:
+          type: integer
+        step_id:
+          type: integer
+        field_name:
+          type: string
+        field_type:
+          type: string
+        field_label:
+          type: string
+        is_required:
+          type: boolean
+        field_order:
+          type: integer
+        options:
+          type: string
+          nullable: true
+        validation_rules:
+          type: string
+          nullable: true
+
+    PreCheckoutStep:
+      type: object
+      properties:
+        id:
+          type: integer
+        marina_id:
+          type: integer
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        step_order:
+          type: integer
+        is_required:
+          type: boolean
+        is_active:
+          type: boolean
+        external_validation:
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        fields:
+          type: array
+          items:
+            $ref: "#/components/schemas/PreCheckoutStepField"
+
+    # ── Pagination ────────────────────────────────────────────────────────────
+    Pagination:
+      type: object
+      properties:
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+        hasMore:
+          type: boolean
+
+# ─── Tags ──────────────────────────────────────────────────────────────────────
+tags:
+  - name: Health
+    description: API liveness and connectivity checks
+  - name: Auth (User)
+    description: Guest / user registration and login via email OTP
+  - name: Auth (Host)
+    description: Host login via email OTP
+  - name: User Profile
+    description: Current user profile management
+  - name: Bookings
+    description: Marina slot bookings and payment flow
+  - name: Marinas
+    description: Public marina search and details
+  - name: Slips
+    description: Available slip queries
+  - name: Boats
+    description: User boat management
+  - name: FAQ
+    description: Frequently asked questions
+  - name: Support
+    description: Customer support tickets
+  - name: Stripe
+    description: Stripe identity verification
+  - name: Webhooks
+    description: Inbound Stripe webhooks
+  - name: Host
+    description: Host portal — bookings, marinas, guests and analytics
+  - name: Host Management
+    description: Assign and manage hosts for marinas
+  - name: Marina Management
+    description: Host CRUD for slips, amenities, anchorages, seabeds, moorings, points and images
+  - name: Admin
+    description: Platform-level admin operations
+  - name: Tracking
+    description: Anonymous visitor analytics
+
+# ─── Paths ─────────────────────────────────────────────────────────────────────
+paths:
+  # ════════════════════════════════════════════════════════
+  # HEALTH
+  # ════════════════════════════════════════════════════════
+  /health:
+    get:
+      tags: [Health]
+      summary: API health check (also tests DB connectivity)
+      operationId: getHealth
+      responses:
+        "200":
+          description: API and database are healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "DockNow API is running" }
+                  timestamp: { type: string, format: date-time }
+                  database: { type: string, example: connected }
+        "500":
+          description: Health check failed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /ping:
+    get:
+      tags: [Health]
+      summary: Simple liveness ping
+      operationId: getPing
+      responses:
+        "200":
+          description: Pong
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string, example: pong }
+
+  # ════════════════════════════════════════════════════════
+  # AUTH (USER)
+  # ════════════════════════════════════════════════════════
+  /auth/check-guest:
+    post:
+      tags: [Auth (User)]
+      summary: Check whether a guest email is already registered
+      operationId: checkGuest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "200":
+          description: Lookup result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  exists: { type: boolean }
+                  userId:
+                    type: integer
+                    nullable: true
+        "400":
+          description: Email missing
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /auth/register-guest:
+    post:
+      tags: [Auth (User)]
+      summary: Register a new guest user
+      operationId: registerGuest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, fullName]
+              properties:
+                email:
+                  type: string
+                  format: email
+                fullName:
+                  type: string
+                phone:
+                  type: string
+                  nullable: true
+                phoneCode:
+                  type: string
+                  nullable: true
+                  example: "+1"
+                countryCode:
+                  type: string
+                  nullable: true
+                  minLength: 2
+                  maxLength: 3
+                dateOfBirth:
+                  type: string
+                  format: date
+                  nullable: true
+      responses:
+        "201":
+          description: Guest registered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  userId: { type: integer }
+        "400":
+          description: Validation error or email already registered
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /auth/send-guest-code:
+    post:
+      tags: [Auth (User)]
+      summary: Send email verification code to a guest
+      operationId: sendGuestCode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, email]
+              properties:
+                userId:
+                  type: integer
+                email:
+                  type: string
+                  format: email
+      responses:
+        "200":
+          description: Code sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+                  debug_code:
+                    type: string
+                    nullable: true
+                    description: "Only present in development mode"
+        "400":
+          description: Missing fields
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /auth/verify-guest-code:
+    post:
+      tags: [Auth (User)]
+      summary: Verify guest OTP and return JWT
+      operationId: verifyGuestCode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, code]
+              properties:
+                userId:
+                  type: integer
+                code:
+                  type: string
+                  example: "123456"
+      responses:
+        "200":
+          description: Verification successful — JWT issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  token: { type: string, description: "Bearer JWT" }
+                  user:
+                    $ref: "#/components/schemas/UserPublic"
+        "401":
+          description: Invalid or expired code
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /auth/me:
+    get:
+      tags: [Auth (User)]
+      summary: Get the currently authenticated user
+      operationId: getAuthMe
+      security:
+        - UserAuth: []
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  user: { $ref: "#/components/schemas/UserPublic" }
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  # ════════════════════════════════════════════════════════
+  # AUTH (HOST)
+  # ════════════════════════════════════════════════════════
+  /host/send-code:
+    post:
+      tags: [Auth (Host)]
+      summary: Send verification code to a host email
+      operationId: sendHostCode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "200":
+          description: Code sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+                  debug_code: { type: string, nullable: true }
+        "404":
+          description: Host not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /host/verify-code:
+    post:
+      tags: [Auth (Host)]
+      summary: Verify host OTP and return JWT
+      operationId: verifyHostCode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, code]
+              properties:
+                email:
+                  type: string
+                  format: email
+                code:
+                  type: string
+                  example: "123456"
+      responses:
+        "200":
+          description: Verification successful — JWT issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+                  token: { type: string }
+                  host: { $ref: "#/components/schemas/HostPublic" }
+        "401":
+          description: Invalid or expired code
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  # ════════════════════════════════════════════════════════
+  # USER PROFILE
+  # ════════════════════════════════════════════════════════
+  /profile/me:
+    get:
+      tags: [User Profile]
+      summary: Get current user profile
+      operationId: getProfile
+      security:
+        - UserAuth: []
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { $ref: "#/components/schemas/UserPublic" }
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    put:
+      tags: [User Profile]
+      summary: Update current user profile
+      operationId: updateProfile
+      security:
+        - UserAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                full_name: { type: string }
+                phone: { type: string, nullable: true }
+                phone_code: { type: string, nullable: true }
+                country_code: { type: string, nullable: true }
+                date_of_birth: { type: string, format: date, nullable: true }
+                profile_image_url: { type: string, nullable: true }
+                general_notifications: { type: boolean }
+                marketing_notifications: { type: boolean }
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { $ref: "#/components/schemas/UserPublic" }
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  # ════════════════════════════════════════════════════════
+  # BOOKINGS
+  # ════════════════════════════════════════════════════════
+  /bookings/my-bookings:
+    get:
+      tags: [Bookings]
+      summary: Get bookings for the authenticated user
+      operationId: getMyBookings
+      security:
+        - UserAuth: []
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, confirmed, cancelled, completed]
+          description: Filter by booking status
+      responses:
+        "200":
+          description: List of bookings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/BookingBase" }
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /bookings/create-payment-intent:
+    post:
+      tags: [Bookings]
+      summary: Create a Stripe PaymentIntent and a pending booking record
+      operationId: createPaymentIntent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, marinaId, boatId, checkIn, checkOut]
+              properties:
+                userId:
+                  type: integer
+                marinaId:
+                  type: integer
+                boatId:
+                  type: integer
+                slipId:
+                  type: integer
+                  nullable: true
+                checkIn:
+                  type: string
+                  format: date
+                checkOut:
+                  type: string
+                  format: date
+                couponCode:
+                  type: string
+                  nullable: true
+                specialRequests:
+                  type: string
+                  nullable: true
+                isMobileApp:
+                  type: boolean
+                  default: false
+                  description: |
+                    Set to `true` when calling from the mobile app.
+                    When `true` the server resolves the Stripe secret key from the
+                    `environment_keys` database table (so keys can be rotated without
+                    a re-deploy). When `false` or omitted the server uses the
+                    `STRIPE_SECRET_KEY` environment variable (web default).
+      responses:
+        "200":
+          description: PaymentIntent created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  clientSecret: { type: string }
+                  bookingId: { type: integer }
+                  totalAmount: { type: number }
+        "404":
+          description: Marina not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "500":
+          description: Stripe error
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /bookings/confirm:
+    post:
+      tags: [Bookings]
+      summary: Confirm a booking after successful payment
+      operationId: confirmBooking
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bookingId, paymentIntentId]
+              properties:
+                bookingId:
+                  type: integer
+                paymentIntentId:
+                  type: string
+      responses:
+        "200":
+          description: Booking confirmed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      id: { type: integer }
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /bookings/validate-coupon:
+    post:
+      tags: [Bookings]
+      summary: Validate a coupon code for a marina
+      operationId: validateCoupon
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, marinaId]
+              properties:
+                code:
+                  type: string
+                marinaId:
+                  type: integer
+      responses:
+        "200":
+          description: Valid coupon
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  coupon:
+                    type: object
+                    properties:
+                      id: { type: integer }
+                      code: { type: string }
+                      discount_type:
+                        type: string
+                        enum: [percentage, fixed]
+                      discount_value: { type: number }
+                      expires_at: { type: string, format: date-time }
+        "404":
+          description: Invalid or expired coupon
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /bookings/cancel:
+    post:
+      tags: [Bookings]
+      summary: Cancel a booking
+      operationId: cancelBooking
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bookingId]
+              properties:
+                bookingId:
+                  type: integer
+                reason:
+                  type: string
+                  nullable: true
+      responses:
+        "200":
+          description: Booking cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /bookings/cancellation-requests:
+    get:
+      tags: [Bookings]
+      summary: Get cancellation requests for the authenticated user
+      operationId: getCancellationRequests
+      security:
+        - UserAuth: []
+      parameters:
+        - in: query
+          name: bookingId
+          schema: { type: integer }
+          description: Filter by booking ID
+      responses:
+        "200":
+          description: List of cancellation requests
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      type: object
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /bookings/pre-checkout-steps:
+    get:
+      tags: [Bookings]
+      summary: Get pre-checkout steps for a marina (public)
+      operationId: getPreCheckoutSteps
+      parameters:
+        - in: query
+          name: marinaId
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Pre-checkout steps with fields
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  steps:
+                    type: array
+                    items: { $ref: "#/components/schemas/PreCheckoutStep" }
+        "400":
+          description: marinaId required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  # ════════════════════════════════════════════════════════
+  # MARINAS
+  # ════════════════════════════════════════════════════════
+  /marina-registration:
+    post:
+      tags: [Marinas]
+      summary: Submit a marina or private port for review (Become a Member)
+      description: |
+        Public endpoint. Creates the marina with `is_active = 0` and a host account
+        (also inactive). Sends a welcome email to the host and an admin notification.
+        The listing will be reviewed and activated by the DockNow team.
+      operationId: submitMarinaRegistration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - host_name
+                - host_email
+                - name
+                - description
+                - price_per_day
+                - city
+                - country
+                - latitude
+                - longitude
+                - contact_name
+                - contact_email
+              properties:
+                host_name:
+                  type: string
+                  example: "Jane Smith"
+                host_email:
+                  type: string
+                  format: email
+                  example: "jane@marina.com"
+                host_phone:
+                  type: string
+                  example: "+1 305 555 0100"
+                company_name:
+                  type: string
+                  example: "Acme Marina Group"
+                business_type_id:
+                  type: integer
+                  example: 1
+                  description: "1=Full Service, 2=Dry Storage, 3=Private Port, 4=Yacht Club"
+                name:
+                  type: string
+                  example: "Sunset Bay Marina"
+                description:
+                  type: string
+                  example: "Beautiful full-service marina in the heart of Miami."
+                price_per_day:
+                  type: number
+                  example: 150.00
+                address:
+                  type: string
+                  example: "123 Marina Drive"
+                city:
+                  type: string
+                  example: "Miami"
+                state:
+                  type: string
+                  example: "Florida"
+                country:
+                  type: string
+                  example: "United States"
+                postal_code:
+                  type: string
+                  example: "33139"
+                latitude:
+                  type: number
+                  example: 25.761681
+                longitude:
+                  type: number
+                  example: -80.191788
+                contact_name:
+                  type: string
+                  example: "Jane Smith"
+                contact_email:
+                  type: string
+                  format: email
+                  example: "contact@marina.com"
+                contact_phone:
+                  type: string
+                  example: "+1 305 555 0100"
+                website_url:
+                  type: string
+                  example: "https://sunsetbaymarina.com"
+                total_slips:
+                  type: integer
+                  example: 50
+                max_boat_length_meters:
+                  type: number
+                  example: 30.0
+                max_boat_draft_meters:
+                  type: number
+                  example: 3.5
+                has_fuel_dock:
+                  type: boolean
+                  example: true
+                has_pump_out:
+                  type: boolean
+                  example: false
+                has_haul_out:
+                  type: boolean
+                  example: false
+                has_boat_ramp:
+                  type: boolean
+                  example: true
+                has_dry_storage:
+                  type: boolean
+                  example: false
+                has_live_aboard:
+                  type: boolean
+                  example: false
+                accepts_transients:
+                  type: boolean
+                  example: true
+                accepts_megayachts:
+                  type: boolean
+                  example: false
+                amenity_ids:
+                  type: array
+                  items:
+                    type: integer
+                  example: [1, 2, 3, 5, 6]
+                  description: "IDs from amenity_types table"
+                seabed_type_id:
+                  type: integer
+                  example: 1
+                  description: "Optional. ID from seabed_types table (1=Sand, 2=Mud, 3=Clay, 4=Rock, 5=Coral, 6=Gravel, 7=Weed, 8=Mixed)"
+                seabed_depth_meters:
+                  type: number
+                  example: 12.5
+                  description: "Optional. Water depth at the marina seabed in meters"
+                seabed_description:
+                  type: string
+                  example: "Fine sandy seabed with good holding"
+                  description: "Optional. Brief description of seabed conditions"
+                seabed_notes:
+                  type: string
+                  example: "Best anchoring in the north-east corner"
+                  description: "Optional. Additional notes about the seabed"
+                cover_image_url:
+                  type: string
+                  example: "https://disruptinglabs.com/data/docknow/marina-temp-1234/main_image/photo.jpg"
+                  description: "Optional. Full URL of the marina cover photo, returned by the image upload API"
+                gallery_image_urls:
+                  type: array
+                  items:
+                    type: string
+                  example:
+                    [
+                      "https://disruptinglabs.com/data/docknow/marina-temp-1234/images/1.jpg",
+                    ]
+                  description: "Optional. Array of full URLs for gallery images, returned by the image upload API"
+      responses:
+        "201":
+          description: Registration submitted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Your venue has been submitted for review."
+                  marina_id:
+                    type: integer
+                    example: 42
+        "400":
+          description: Missing required fields
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /marinas/search:
+    get:
+      tags: [Marinas]
+      summary: Search marinas with filters and pagination
+      operationId: searchMarinas
+      parameters:
+        - in: query
+          name: city
+          schema: { type: string }
+        - in: query
+          name: state
+          schema: { type: string }
+        - in: query
+          name: checkIn
+          schema: { type: string, format: date }
+        - in: query
+          name: checkOut
+          schema: { type: string, format: date }
+        - in: query
+          name: minPrice
+          schema: { type: number }
+        - in: query
+          name: maxPrice
+          schema: { type: number }
+        - in: query
+          name: amenities
+          schema:
+            type: array
+            items: { type: string }
+          style: form
+          explode: true
+          description: Amenity slugs to require (all must match)
+        - in: query
+          name: businessTypeId
+          schema: { type: integer }
+        - in: query
+          name: minBoatLength
+          schema: { type: number }
+        - in: query
+          name: maxBoatLength
+          schema: { type: number }
+        - in: query
+          name: minDraft
+          schema: { type: number }
+        - in: query
+          name: searchTerm
+          schema: { type: string }
+        - in: query
+          name: featured
+          schema: { type: string, enum: ["true", "false"] }
+        - in: query
+          name: seabedTypes
+          schema:
+            type: array
+            items: { type: integer }
+          style: form
+          explode: true
+        - in: query
+          name: mooringTypes
+          schema:
+            type: array
+            items: { type: integer }
+          style: form
+          explode: true
+        - in: query
+          name: pointTypes
+          schema:
+            type: array
+            items: { type: integer }
+          style: form
+          explode: true
+        - in: query
+          name: anchorageTypes
+          schema:
+            type: array
+            items: { type: integer }
+          style: form
+          explode: true
+        - in: query
+          name: protectionLevel
+          schema:
+            type: string
+            enum: [excellent, good, moderate]
+        - in: query
+          name: marinaFeatures
+          schema:
+            type: array
+            items:
+              type: string
+              enum:
+                - has_fuel_dock
+                - has_pump_out
+                - has_haul_out
+                - has_boat_ramp
+                - has_dry_storage
+                - has_live_aboard
+                - accepts_transients
+                - accepts_megayachts
+          style: form
+          explode: true
+        - in: query
+          name: limit
+          schema: { type: integer, default: 20 }
+        - in: query
+          name: offset
+          schema: { type: integer, default: 0 }
+      responses:
+        "200":
+          description: Matching marinas with pagination
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      marinas:
+                        type: array
+                        items: { type: object }
+                      pagination: { $ref: "#/components/schemas/Pagination" }
+
+  /marinas/filters:
+    get:
+      tags: [Marinas]
+      summary: Get all available filter options for the search UI
+      operationId: getMarinaFilters
+      responses:
+        "200":
+          description: Filter options
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      amenityTypes: { type: array, items: { type: object } }
+                      businessTypes: { type: array, items: { type: object } }
+                      locations:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            city: { type: string }
+                            state: { type: string }
+                            country: { type: string }
+                            label: { type: string }
+                      priceRange:
+                        type: object
+                        properties:
+                          min: { type: number }
+                          max: { type: number }
+                      seabedTypes: { type: array, items: { type: object } }
+                      mooringTypes: { type: array, items: { type: object } }
+                      pointTypes: { type: array, items: { type: object } }
+                      anchorageTypes: { type: array, items: { type: object } }
+                      protectionLevels:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            value: { type: string }
+                            label: { type: string }
+                      marinaFeatures:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            key: { type: string }
+                            name: { type: string }
+                            description: { type: string }
+
+  /marinas/availability:
+    get:
+      tags: [Marinas]
+      summary: Get booked dates, blocked dates and available slips for a marina
+      operationId: getMarinaAvailability
+      parameters:
+        - in: query
+          name: marinaId
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: checkIn
+          schema: { type: string, format: date }
+        - in: query
+          name: checkOut
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: Availability data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      bookedDates:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            checkIn: { type: string, format: date }
+                            checkOut: { type: string, format: date }
+                      blockedDates:
+                        type: array
+                        items:
+                          type: object
+                      availableSlips:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id: { type: integer }
+                            slipNumber: { type: string }
+                            length: { type: number }
+                            width: { type: number }
+                            depth: { type: number }
+                            pricePerDay: { type: number }
+        "400":
+          description: Missing or invalid parameters
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /marinas/{slug}:
+    get:
+      tags: [Marinas]
+      summary: Get full marina details by slug
+      operationId: getMarinaDetails
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Marina details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { $ref: "#/components/schemas/MarinaDetail" }
+        "404":
+          description: Marina not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  # ════════════════════════════════════════════════════════
+  # SLIPS
+  # ════════════════════════════════════════════════════════
+  /slips/available:
+    get:
+      tags: [Slips]
+      summary: Get available slips for a marina and date range
+      operationId: getAvailableSlips
+      parameters:
+        - in: query
+          name: marinaId
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: checkIn
+          required: true
+          schema: { type: string, format: date }
+        - in: query
+          name: checkOut
+          required: true
+          schema: { type: string, format: date }
+        - in: query
+          name: boatLength
+          schema: { type: number }
+          description: Minimum slip length required (meters)
+        - in: query
+          name: boatWidth
+          schema: { type: number }
+          description: Minimum slip width required (meters)
+        - in: query
+          name: boatDraft
+          schema: { type: number }
+          description: Minimum slip depth required (meters)
+      responses:
+        "200":
+          description: Available slips
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      slips:
+                        type: array
+                        items: { $ref: "#/components/schemas/AvailableSlip" }
+                      availableCount: { type: integer }
+        "400":
+          description: Required parameters missing
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  # ════════════════════════════════════════════════════════
+  # BOATS
+  # ════════════════════════════════════════════════════════
+  /boats:
+    get:
+      tags: [Boats]
+      summary: Get boats owned by the authenticated user
+      operationId: getBoats
+      security:
+        - UserAuth: []
+      responses:
+        "200":
+          description: List of boats
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  boats:
+                    type: array
+                    items: { $ref: "#/components/schemas/Boat" }
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    post:
+      tags: [Boats]
+      summary: Create a new boat for the authenticated user
+      operationId: createBoat
+      security:
+        - UserAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [boat_name, length_meters]
+              properties:
+                boat_name: { type: string }
+                boat_type_id: { type: integer, nullable: true }
+                manufacturer: { type: string, nullable: true }
+                model: { type: string, nullable: true }
+                year: { type: integer, nullable: true }
+                length_meters: { type: number }
+                width_meters: { type: number, nullable: true }
+                draft_meters: { type: number, nullable: true }
+                home_marina: { type: string, nullable: true }
+                registration_number: { type: string, nullable: true }
+                insurance_provider: { type: string, nullable: true }
+                insurance_policy_number: { type: string, nullable: true }
+      responses:
+        "201":
+          description: Boat created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  boat: { $ref: "#/components/schemas/Boat" }
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /boats/types:
+    get:
+      tags: [Boats]
+      summary: Get all boat types (public)
+      operationId: getBoatTypes
+      responses:
+        "200":
+          description: Boat types
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/BoatType" }
+
+  /boats/{id}:
+    put:
+      tags: [Boats]
+      summary: Update a boat
+      operationId: updateBoat
+      security:
+        - UserAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                model: { type: string, nullable: true }
+                manufacturer: { type: string, nullable: true }
+                boatTypeId: { type: integer, nullable: true }
+                year: { type: integer, nullable: true }
+                lengthMeters: { type: number, nullable: true }
+                widthMeters: { type: number, nullable: true }
+                draftMeters: { type: number, nullable: true }
+                homeMarina: { type: string, nullable: true }
+                registrationNumber: { type: string, nullable: true }
+                insuranceProvider: { type: string, nullable: true }
+                insurancePolicyNumber: { type: string, nullable: true }
+      responses:
+        "200":
+          description: Updated boat
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { type: object }
+        "400":
+          description: Boat ID required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    delete:
+      tags: [Boats]
+      summary: Soft-delete a boat
+      operationId: deleteBoat
+      security:
+        - UserAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Boat deleted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SuccessBoolean" }
+        "400":
+          description: Boat ID required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  # ════════════════════════════════════════════════════════
+  # FAQ
+  # ════════════════════════════════════════════════════════
+  /faq/categories:
+    get:
+      tags: [FAQ]
+      summary: Get all active FAQ categories with question counts
+      operationId: getFAQCategories
+      responses:
+        "200":
+          description: FAQ categories
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/FAQCategory" }
+
+  /faq/questions:
+    get:
+      tags: [FAQ]
+      summary: Get FAQ questions with optional filters
+      operationId: getFAQQuestions
+      parameters:
+        - in: query
+          name: category
+          schema: { type: string }
+          description: Category slug
+        - in: query
+          name: featured
+          schema: { type: string, enum: ["true"] }
+        - in: query
+          name: search
+          schema: { type: string }
+      responses:
+        "200":
+          description: FAQ questions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/FAQQuestion" }
+
+  /faq/questions/{slug}:
+    get:
+      tags: [FAQ]
+      summary: Get a single FAQ question by slug (also increments view count)
+      operationId: getFAQQuestion
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: FAQ question
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { $ref: "#/components/schemas/FAQQuestion" }
+        "404":
+          description: Question not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  # ════════════════════════════════════════════════════════
+  # SUPPORT
+  # ════════════════════════════════════════════════════════
+  /support/tickets:
+    post:
+      tags: [Support]
+      summary: Create a new support ticket
+      operationId: createSupportTicket
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, subject, category, message]
+              properties:
+                name: { type: string }
+                email: { type: string, format: email }
+                phone: { type: string, nullable: true }
+                subject: { type: string }
+                category: { type: string }
+                priority:
+                  type: string
+                  enum: [low, medium, high, urgent]
+                  default: medium
+                message: { type: string }
+                bookingId: { type: integer, nullable: true }
+      responses:
+        "200":
+          description: Ticket created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      ticketId: { type: integer }
+                      ticketNumber: { type: string }
+                      message: { type: string }
+        "400":
+          description: Required fields missing
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /support/tickets/my-tickets:
+    get:
+      tags: [Support]
+      summary: Get support tickets for the authenticated guest
+      operationId: getMyTickets
+      security:
+        - GuestAuth: []
+      responses:
+        "200":
+          description: User's tickets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/SupportTicket" }
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /support/tickets/{ticketNumber}:
+    get:
+      tags: [Support]
+      summary: Get full ticket details including messages
+      operationId: getTicketDetails
+      parameters:
+        - in: path
+          name: ticketNumber
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Ticket details with message thread
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    allOf:
+                      - $ref: "#/components/schemas/SupportTicket"
+                      - type: object
+                        properties:
+                          messages:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                id: { type: integer }
+                                sender_type: { type: string }
+                                sender_name: { type: string }
+                                message: { type: string }
+                                created_at: { type: string, format: date-time }
+        "404":
+          description: Ticket not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  # ════════════════════════════════════════════════════════
+  # STRIPE
+  # ════════════════════════════════════════════════════════
+  /stripe/create-identity-session:
+    post:
+      tags: [Stripe]
+      summary: Create a Stripe Identity verification session
+      operationId: createIdentitySession
+      security:
+        - UserAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stepId]
+              properties:
+                stepId: { type: integer }
+                bookingId: { type: integer, nullable: true }
+                marinaId: { type: integer, nullable: true }
+                isMobileApp:
+                  type: boolean
+                  default: false
+                  description: |
+                    Set to `true` when calling from the mobile app.
+                    When `true` the server resolves the Stripe secret key from the
+                    `environment_keys` database table. When `false` or omitted the
+                    server uses the `STRIPE_SECRET_KEY` environment variable (web default).
+      responses:
+        "200":
+          description: Identity session created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  clientSecret: { type: string }
+                  sessionId: { type: string }
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  # ════════════════════════════════════════════════════════
+  # WEBHOOKS
+  # ════════════════════════════════════════════════════════
+  /webhooks/stripe-identity:
+    post:
+      tags: [Webhooks]
+      summary: Receive Stripe Identity webhook events
+      operationId: stripeIdentityWebhook
+      description: |
+        Called by Stripe when an identity verification session changes state.
+        Requires a valid `Stripe-Signature` header.
+      parameters:
+        - in: header
+          name: stripe-signature
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Raw Stripe webhook event payload
+      responses:
+        "200":
+          description: Event received and processed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  received: { type: boolean }
+        "400":
+          description: Invalid signature or payload
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  # ════════════════════════════════════════════════════════
+  # TRACKING
+  # ════════════════════════════════════════════════════════
+  /track-home-visitor:
+    post:
+      tags: [Tracking]
+      summary: Record a home-page visitor session
+      operationId: trackHomeVisitor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sessionId]
+              properties:
+                sessionId: { type: string }
+                deviceType:
+                  type: string
+                  enum: [mobile, tablet, desktop, other]
+                browser: { type: string, nullable: true }
+                os: { type: string, nullable: true }
+                landingPage: { type: string, default: "/" }
+      responses:
+        "200":
+          description: Visitor tracked
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SuccessBoolean" }
+        "400":
+          description: Session ID required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  # ════════════════════════════════════════════════════════
+  # PAYMENTS CONFIG
+  # ════════════════════════════════════════════════════════
+  /payments/config:
+    get:
+      tags: [Payments]
+      summary: Get Stripe publishable key for app clients
+      operationId: getPaymentsConfig
+      description: |
+        **For mobile/app clients only.**
+
+        Returns the Stripe publishable key that should be used to initialise the
+        Stripe SDK on the app. The key is read from the `environment_keys` database
+        table (not from server environment variables) so it can be rotated without
+        a re-deploy.
+
+        **Key selection:** The server looks up the row where
+        `title = 'stripe'`, `type = 'publishable'`, and
+        `is_test = (NODE_ENV !== 'production' ? 1 : 0)`.
+
+        > **Web clients** do not need to call this endpoint — they initialise Stripe
+        > using the `STRIPE_PUBLISHABLE_KEY` server environment variable which is
+        > available at build/runtime on the hosting platform (Vercel / Netlify).
+      responses:
+        "200":
+          description: Stripe publishable key for the active environment
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  publishable_key:
+                    type: string
+                    description: |
+                      Stripe publishable key from the `environment_keys` table.
+                      Starts with `pk_test_` in test mode and `pk_live_` in production.
+                    example: "pk_test_51RTujEGdyWn9Nlx0..."
+        "500":
+          description: Stripe publishable key is not configured in the database
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  # ════════════════════════════════════════════════════════
+  # ADMIN — HOME ANALYTICS
+  # ════════════════════════════════════════════════════════
+  /admin/home-analytics:
+    get:
+      tags: [Admin]
+      summary: Get home-page visitor analytics
+      operationId: getAdminHomeAnalytics
+      parameters:
+        - in: query
+          name: period
+          schema: { type: integer, default: 30 }
+          description: Number of days to look back
+      responses:
+        "200":
+          description: Daily analytics data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date: { type: string, format: date }
+                        total_visits: { type: integer }
+                        unique_visitors: { type: integer }
+                        mobile_visits: { type: integer }
+                        desktop_visits: { type: integer }
+
+  # ════════════════════════════════════════════════════════
+  # ADMIN — ENVIRONMENT KEYS
+  # Keys stored here are consumed by APP clients via GET /payments/config.
+  # Web clients use server-side environment variables instead.
+  # ════════════════════════════════════════════════════════
+  /admin/environment-keys:
+    get:
+      tags: [Admin]
+      summary: List all environment keys (secret values masked)
+      operationId: getEnvironmentKeys
+      description: |
+        Returns all rows from the `environment_keys` table.
+
+        **Why this table exists:** Mobile/app clients cannot read server environment
+        variables, so Stripe keys are stored here and fetched at runtime via
+        `GET /api/payments/config`. Web clients continue to use the hosting
+        platform's environment variables (`STRIPE_SECRET_KEY`, etc.).
+
+        **Security:** Secret key values are masked in the response — only the last
+        4 characters are shown (e.g. `****************************abcd`).
+        The full value is never returned by this endpoint.
+      security:
+        - HostAuth: []
+      responses:
+        "200":
+          description: List of environment key rows (secrets masked)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/EnvironmentKey" }
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    post:
+      tags: [Admin]
+      summary: Create or update an environment key (upsert)
+      operationId: upsertEnvironmentKey
+      description: |
+        Inserts a new row or updates the `key_string` of an existing row in the
+        `environment_keys` table, matched by `(title, type, isTest)`.
+
+        Use this to rotate Stripe keys for app clients **without a server re-deploy**.
+        Web clients are unaffected — they use server environment variables.
+
+        **Typical Stripe rows to manage:**
+        - `{ title: "stripe", type: "publishable", isTest: true }` — test publishable key
+        - `{ title: "stripe", type: "secret",      isTest: true }` — test secret key
+        - `{ title: "stripe", type: "publishable", isTest: false }` — live publishable key
+        - `{ title: "stripe", type: "secret",      isTest: false }` — live secret key
+      security:
+        - HostAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, type, keyString, isTest]
+              properties:
+                title:
+                  type: string
+                  description: "Service name (e.g. 'stripe')"
+                  example: stripe
+                type:
+                  type: string
+                  description: "Key type: publishable | secret | webhook"
+                  enum: [publishable, secret, webhook]
+                  example: publishable
+                keyString:
+                  type: string
+                  description: "The full key value to store (e.g. pk_test_... or sk_test_...)"
+                  example: "pk_test_51RTujEGdyWn9Nlx0..."
+                isTest:
+                  type: boolean
+                  description: "true = test/sandbox key, false = live/production key"
+                  example: true
+      responses:
+        "200":
+          description: Key saved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message:
+                    {
+                      type: string,
+                      example: "Environment key saved successfully",
+                    }
+        "400":
+          description: Missing required fields
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /admin/environment-keys/{id}:
+    delete:
+      tags: [Admin]
+      summary: Delete an environment key by ID
+      operationId: deleteEnvironmentKey
+      description: |
+        Permanently removes a row from the `environment_keys` table.
+
+        > **Caution:** Deleting the active Stripe publishable key row will cause
+        > `GET /api/payments/config` to return a 500 error for app clients until
+        > a replacement row is inserted.
+      security:
+        - HostAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+          description: "Primary key (`id`) of the `environment_keys` row to delete"
+      responses:
+        "200":
+          description: Key deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string, example: "Environment key deleted" }
+        "400":
+          description: Invalid ID
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  # ════════════════════════════════════════════════════════
+  # HOST PORTAL
+  # ════════════════════════════════════════════════════════
+  /host/me:
+    get:
+      tags: [Host]
+      summary: Get the currently authenticated host
+      operationId: getHostMe
+      security:
+        - HostAuth: []
+      responses:
+        "200":
+          description: Current host
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  host: { $ref: "#/components/schemas/HostPublic" }
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /host/bookings:
+    get:
+      tags: [Host]
+      summary: Get all bookings for the host's marinas
+      operationId: getHostBookings
+      security:
+        - HostAuth: []
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, confirmed, cancelled, completed]
+        - in: query
+          name: marinaId
+          schema: { type: integer }
+        - in: query
+          name: startDate
+          schema: { type: string, format: date }
+        - in: query
+          name: endDate
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: Bookings list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  bookings:
+                    type: array
+                    items: { type: object }
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /host/blocked-dates:
+    get:
+      tags: [Host]
+      summary: Get blocked dates for the host's marinas
+      operationId: getHostBlockedDates
+      security:
+        - HostAuth: []
+      parameters:
+        - in: query
+          name: marinaId
+          schema: { type: integer }
+        - in: query
+          name: startDate
+          schema: { type: string, format: date }
+        - in: query
+          name: endDate
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: Blocked dates
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  blockedDates:
+                    type: array
+                    items: { type: object }
+    post:
+      tags: [Host]
+      summary: Block one or more dates for a marina or slip
+      operationId: createHostBlockedDate
+      security:
+        - HostAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [marinaId, startDate, reason]
+              properties:
+                marinaId: { type: integer }
+                slipId: { type: integer, nullable: true }
+                startDate: { type: string, format: date }
+                endDate: { type: string, format: date }
+                reason: { type: string }
+                isAllDay: { type: boolean, default: true }
+                startTime:
+                  type: string
+                  example: "09:00"
+                  nullable: true
+                endTime:
+                  type: string
+                  example: "17:00"
+                  nullable: true
+      responses:
+        "201":
+          description: Dates blocked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  inserted: { type: integer }
+                  requested: { type: integer }
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "403":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /host/marinas:
+    get:
+      tags: [Host]
+      summary: Get all marinas managed by the host
+      operationId: getHostMarinas
+      security:
+        - HostAuth: []
+      responses:
+        "200":
+          description: Host's marinas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  marinas: { type: array, items: { type: object } }
+
+  /host/slips:
+    get:
+      tags: [Host]
+      summary: Get slips for the host's marinas
+      operationId: getHostSlips
+      security:
+        - HostAuth: []
+      parameters:
+        - in: query
+          name: marinaId
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Slips list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  slips: { type: array, items: { type: object } }
+
+  /host/guests:
+    get:
+      tags: [Host]
+      summary: Get all guests who have booked at the host's marinas
+      operationId: getHostGuests
+      security:
+        - HostAuth: []
+      responses:
+        "200":
+          description: Guests list with booking counts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  guests:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        email: { type: string }
+                        full_name: { type: string }
+                        phone: { type: string, nullable: true }
+                        created_at: { type: string, format: date-time }
+                        total_bookings: { type: integer }
+
+  /host/payments:
+    get:
+      tags: [Host]
+      summary: Get payment history with Stripe data for the host's marinas
+      operationId: getHostPayments
+      security:
+        - HostAuth: []
+      responses:
+        "200":
+          description: Payments and totals
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  payments: { type: array, items: { type: object } }
+                  totals:
+                    type: object
+                    properties:
+                      pending_payout: { type: number }
+                      total_earned: { type: number }
+                      total_transactions: { type: integer }
+
+  /host/dashboard/stats:
+    get:
+      tags: [Host]
+      summary: Get dashboard statistics
+      operationId: getHostDashboardStats
+      security:
+        - HostAuth: []
+      responses:
+        "200":
+          description: Dashboard stats
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalBookings: { type: integer }
+                  totalRevenue: { type: number }
+                  activeBookings: { type: integer }
+                  totalMarinas: { type: integer }
+                  recentBookings: { type: array, items: { type: object } }
+                  bookingsByStatus: { type: array, items: { type: object } }
+
+  /host/pre-checkout-steps:
+    get:
+      tags: [Host]
+      summary: Get pre-checkout steps for the host's marinas
+      operationId: getHostPreCheckoutSteps
+      security:
+        - HostAuth: []
+      parameters:
+        - in: query
+          name: marinaId
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Pre-checkout steps
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  steps: { type: array, items: { type: object } }
+    post:
+      tags: [Host]
+      summary: Create a new pre-checkout step
+      operationId: createHostPreCheckoutStep
+      security:
+        - HostAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [marina_id, name]
+              properties:
+                marina_id: { type: integer }
+                name: { type: string }
+                description: { type: string, nullable: true }
+                step_order: { type: integer, default: 1 }
+                is_required: { type: boolean, default: true }
+      responses:
+        "201":
+          description: Step created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  stepId: { type: integer }
+
+  /host/submissions:
+    get:
+      tags: [Host]
+      summary: Get guest pre-checkout step submissions
+      operationId: getHostSubmissions
+      security:
+        - HostAuth: []
+      parameters:
+        - in: query
+          name: bookingId
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Submissions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  submissions: { type: array, items: { type: object } }
+
+  /host/approve-booking:
+    post:
+      tags: [Host]
+      summary: Approve or reject a booking
+      operationId: approveBooking
+      security:
+        - HostAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bookingId, action]
+              properties:
+                bookingId: { type: integer }
+                action:
+                  type: string
+                  enum: [approve, reject]
+                notes:
+                  type: string
+                  nullable: true
+                  description: Reason for rejection (optional)
+      responses:
+        "200":
+          description: Action applied
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SuccessBoolean" }
+        "403":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /host/visitor-analytics:
+    get:
+      tags: [Host]
+      summary: Get marina page visitor analytics for the host
+      operationId: getHostVisitorAnalytics
+      security:
+        - HostAuth: []
+      parameters:
+        - in: query
+          name: period
+          schema: { type: integer, default: 30 }
+          description: Look-back period in days
+      responses:
+        "200":
+          description: Analytics time series
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  analytics:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date: { type: string, format: date }
+                        views: { type: integer }
+                        unique_visitors: { type: integer }
+
+  # ════════════════════════════════════════════════════════
+  # HOST MARINA MANAGEMENT
+  # ════════════════════════════════════════════════════════
+  /host/marina-management:
+    get:
+      tags: [Marina Management]
+      summary: Get full marina management data (slips, features, amenities, images, etc.)
+      operationId: getHostMarinaManagement
+      security:
+        - HostAuth: []
+      responses:
+        "200":
+          description: Complete marina management data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  marinas: { type: array, items: { type: object } }
+
+  /host/marina-management/slips:
+    post:
+      tags: [Marina Management]
+      summary: Create, update or delete a slip
+      operationId: manageHostSlips
+      security:
+        - HostAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:
+                  type: string
+                  enum: [create, update, delete]
+                marinaId: { type: integer, description: "Required for create" }
+                slipId:
+                  { type: integer, description: "Required for update/delete" }
+                slip:
+                  type: object
+                  description: "Slip fields (required for create, partial for update)"
+                  properties:
+                    slip_number: { type: string }
+                    length_meters: { type: number }
+                    width_meters: { type: number }
+                    depth_meters: { type: number, nullable: true }
+                    price_per_day: { type: number }
+                    is_available: { type: boolean }
+                    is_reserved: { type: boolean }
+                    has_power: { type: boolean }
+                    has_water: { type: boolean }
+                    power_capacity_amps: { type: number, nullable: true }
+                    notes: { type: string, nullable: true }
+      responses:
+        "200":
+          description: Action successful
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SuccessBoolean" }
+        "201":
+          description: Slip created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  slipId: { type: integer }
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "403":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /host/marina-management/marina-features:
+    post:
+      tags: [Marina Management]
+      summary: Update marina features (fuel dock, pump out, etc.)
+      operationId: manageHostMarinaFeatures
+      security:
+        - HostAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [marinaId, features]
+              properties:
+                marinaId: { type: integer }
+                features:
+                  type: object
+                  properties:
+                    has_fuel_dock: { type: boolean }
+                    has_pump_out: { type: boolean }
+                    has_haul_out: { type: boolean }
+                    has_boat_ramp: { type: boolean }
+                    has_dry_storage: { type: boolean }
+                    has_live_aboard: { type: boolean }
+                    accepts_transients: { type: boolean }
+                    accepts_megayachts: { type: boolean }
+                    max_haul_out_weight_tons: { type: number, nullable: true }
+      responses:
+        "200":
+          description: Features updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SuccessBoolean" }
+        "403":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /host/marina-management/amenities:
+    post:
+      tags: [Marina Management]
+      summary: Replace the full amenity list for a marina
+      operationId: manageHostAmenities
+      security:
+        - HostAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [marinaId, amenityIds]
+              properties:
+                marinaId: { type: integer }
+                amenityIds:
+                  type: array
+                  items: { type: integer }
+      responses:
+        "200":
+          description: Amenities updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SuccessBoolean" }
+        "403":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /host/marina-management/anchorages:
+    post:
+      tags: [Marina Management]
+      summary: Create, update or delete an anchorage
+      operationId: manageHostAnchorages
+      security:
+        - HostAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [create, update, delete] }
+                marinaId: { type: integer }
+                anchorageId: { type: integer }
+                anchorage:
+                  type: object
+                  properties:
+                    anchorage_type_id: { type: integer }
+                    name: { type: string }
+                    description: { type: string, nullable: true }
+                    latitude: { type: number }
+                    longitude: { type: number }
+                    max_depth_meters: { type: number, nullable: true }
+                    min_depth_meters: { type: number, nullable: true }
+                    capacity: { type: integer, nullable: true }
+                    price_per_day: { type: number, nullable: true }
+                    protection_level:
+                      type: string
+                      enum: [excellent, good, moderate]
+                    is_available: { type: boolean }
+      responses:
+        "200":
+          description: Action successful
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SuccessBoolean" }
+        "201":
+          description: Anchorage created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  anchorageId: { type: integer }
+        "403":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /host/marina-management/seabeds:
+    post:
+      tags: [Marina Management]
+      summary: Create, update or delete a seabed record
+      operationId: manageHostSeabeds
+      security:
+        - HostAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [create, update, delete] }
+                marinaId: { type: integer }
+                seabedId: { type: integer }
+                seabed:
+                  type: object
+                  properties:
+                    seabed_type_id: { type: integer }
+                    anchorage_id: { type: integer, nullable: true }
+                    description: { type: string, nullable: true }
+                    depth_meters: { type: number, nullable: true }
+                    notes: { type: string, nullable: true }
+      responses:
+        "200":
+          description: Action successful
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SuccessBoolean" }
+        "201":
+          description: Seabed created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  seabedId: { type: integer }
+        "403":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /host/marina-management/moorings:
+    post:
+      tags: [Marina Management]
+      summary: Create, update or delete a mooring
+      operationId: manageHostMoorings
+      security:
+        - HostAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [create, update, delete] }
+                marinaId: { type: integer }
+                mooringId: { type: integer }
+                mooring:
+                  type: object
+                  properties:
+                    mooring_type_id: { type: integer }
+                    mooring_number: { type: string }
+                    description: { type: string, nullable: true }
+                    max_boat_length_meters: { type: number }
+                    max_boat_weight_tons: { type: number, nullable: true }
+                    depth_meters: { type: number, nullable: true }
+                    price_per_day: { type: number }
+                    is_available: { type: boolean }
+                    latitude: { type: number, nullable: true }
+                    longitude: { type: number, nullable: true }
+      responses:
+        "200":
+          description: Action successful
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SuccessBoolean" }
+        "201":
+          description: Mooring created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  mooringId: { type: integer }
+        "403":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /host/marina-management/points:
+    post:
+      tags: [Marina Management]
+      summary: Create, update or delete a point of interest
+      operationId: manageHostPoints
+      security:
+        - HostAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [create, update, delete] }
+                marinaId: { type: integer }
+                pointId: { type: integer }
+                point:
+                  type: object
+                  properties:
+                    point_type_id: { type: integer }
+                    name: { type: string }
+                    description: { type: string, nullable: true }
+                    latitude: { type: number }
+                    longitude: { type: number }
+                    is_public: { type: boolean }
+                    is_active: { type: boolean }
+                    contact_info: { type: string, nullable: true }
+                    operating_hours: { type: string, nullable: true }
+      responses:
+        "200":
+          description: Action successful
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SuccessBoolean" }
+        "201":
+          description: Point created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  pointId: { type: integer }
+        "403":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /host/marina-management/images:
+    post:
+      tags: [Marina Management]
+      summary: Create or delete a marina image (stored in cover_image_url / gallery_image_urls)
+      operationId: manageHostMarinaImages
+      security:
+        - HostAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [create, delete] }
+                marinaId: { type: integer }
+                imageUrl:
+                  {
+                    type: string,
+                    description: "URL of the image to delete (required for delete action)",
+                  }
+                image:
+                  type: object
+                  properties:
+                    image_url: { type: string }
+                    is_primary:
+                      {
+                        type: boolean,
+                        default: false,
+                        description: "When true the URL is stored as cover_image_url; otherwise appended to gallery_image_urls",
+                      }
+      responses:
+        "200":
+          description: Action successful
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SuccessBoolean" }
+        "201":
+          description: Image created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  imageUrl: { type: string }
+        "403":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  # ════════════════════════════════════════════════════════
+  # HOST MANAGEMENT (legacy routes kept for compatibility)
+  # ════════════════════════════════════════════════════════
+  /host/manage-hosts:
+    get:
+      tags: [Host Management]
+      summary: Get assigned and available hosts for a marina
+      operationId: getManagedHosts
+      security:
+        - HostAuth: []
+      parameters:
+        - in: query
+          name: marinaId
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Assigned and available hosts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  assignedHosts: { type: array, items: { type: object } }
+                  availableHosts: { type: array, items: { type: object } }
+                  marinaId: { type: integer, nullable: true }
+                  marinaName: { type: string, nullable: true }
+
+  /host/assign-host:
+    post:
+      tags: [Host Management]
+      summary: Assign a host to a marina
+      operationId: assignHost
+      security:
+        - HostAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [marinaId, hostId]
+              properties:
+                marinaId: { type: integer }
+                hostId: { type: integer }
+      responses:
+        "200":
+          description: Host assigned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+        "403":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /host/update-host-role:
+    put:
+      tags: [Host Management]
+      summary: Promote a host to primary at a marina
+      operationId: updateHostRole
+      security:
+        - HostAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [marinaId, hostId]
+              properties:
+                marinaId: { type: integer }
+                hostId: { type: integer }
+                makePrimary: { type: boolean, default: false }
+      responses:
+        "200":
+          description: Role updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+
+  /host/remove-host:
+    delete:
+      tags: [Host Management]
+      summary: Remove a host from a marina
+      operationId: removeHost
+      security:
+        - HostAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [marinaId, hostId]
+              properties:
+                marinaId: { type: integer }
+                hostId: { type: integer }
+      responses:
+        "200":
+          description: Host removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+        "400":
+          description: Cannot remove primary host
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "403":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /host/create-host:
+    post:
+      tags: [Host Management]
+      summary: Create a new host account
+      operationId: createHost
+      security:
+        - HostAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, fullName]
+              properties:
+                email: { type: string, format: email }
+                fullName: { type: string }
+                phone: { type: string, nullable: true }
+                phoneCode: { type: string, nullable: true }
+                countryCode: { type: string, nullable: true }
+      responses:
+        "200":
+          description: Host created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+                  hostId: { type: integer }
+                  host: { type: object }
+        "400":
+          description: Email already registered
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  # ════════════════════════════════════════════════════════
+  # ADMIN — HOST MANAGEMENT (new structure)
+  # ════════════════════════════════════════════════════════
+  /admin/hosts:
+    get:
+      tags: [Admin]
+      summary: Get admin hosts view (assigned + available)
+      operationId: adminGetHosts
+      security:
+        - HostAuth: []
+      parameters:
+        - in: query
+          name: marinaId
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Hosts data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  assignedHosts: { type: array, items: { type: object } }
+                  availableHosts: { type: array, items: { type: object } }
+                  marinaId: { nullable: true }
+                  marinaName: { nullable: true }
+        "403":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    post:
+      tags: [Admin]
+      summary: Create a new host user (admin)
+      operationId: adminCreateHost
+      security:
+        - HostAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, fullName]
+              properties:
+                email: { type: string, format: email }
+                fullName: { type: string }
+                phone: { type: string, nullable: true }
+                marinaId: { type: integer, nullable: true }
+                role:
+                  type: string
+                  enum: [primary, manager]
+                  default: manager
+      responses:
+        "200":
+          description: Host created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+                  host: { $ref: "#/components/schemas/HostPublic" }
+        "400":
+          description: Email already exists
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /admin/hosts/assign:
+    post:
+      tags: [Admin]
+      summary: Assign an existing host to a marina
+      operationId: adminAssignHost
+      security:
+        - HostAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [marinaId, hostId]
+              properties:
+                marinaId: { type: integer }
+                hostId: { type: integer }
+                role:
+                  type: string
+                  enum: [primary, manager]
+                  default: manager
+      responses:
+        "200":
+          description: Host assigned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  assignment:
+                    type: object
+                    properties:
+                      hostId: { type: integer }
+                      marinaId: { type: integer }
+                      role: { type: string }
+                      assignedAt: { type: string, format: date-time }
+        "400":
+          description: Host already assigned
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "403":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /admin/hosts/{hostId}/role:
+    put:
+      tags: [Admin]
+      summary: Update a host's role at their current marina
+      operationId: adminUpdateHostRole
+      security:
+        - HostAuth: []
+      parameters:
+        - in: path
+          name: hostId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role:
+                  type: string
+                  enum: [primary, manager]
+      responses:
+        "200":
+          description: Role updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+        "404":
+          description: Host not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "403":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /admin/hosts/{hostId}:
+    delete:
+      tags: [Admin]
+      summary: Remove a host from their marina assignment
+      operationId: adminRemoveHost
+      security:
+        - HostAuth: []
+      parameters:
+        - in: path
+          name: hostId
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Host removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+        "400":
+          description: Cannot remove primary host or host not assigned
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "403":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "404":
+          description: Host not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }

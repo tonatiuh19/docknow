@@ -44,6 +44,7 @@ export interface Marina {
   max_boat_draft_meters?: number;
   is_active: boolean;
   is_featured: boolean;
+  is_directory_only?: boolean; // true = public directory listing, not bookable on DockNow
   created_at: string;
   updated_at: string;
 
@@ -52,8 +53,7 @@ export interface Marina {
   amenities?: string; // comma-separated amenity names
   avg_rating?: number;
   review_count?: number;
-  primary_image_url?: string; // Primary marina image URL
-  total_images?: number; // Total number of images for the marina
+  primary_image_url?: string; // cover_image_url from marinas table
 }
 
 // Marina search request parameters
@@ -197,15 +197,11 @@ export interface Slip {
   updated_at: string;
 }
 
-// Marina image information
+// Marina image — derived from cover_image_url and gallery_image_urls columns on marinas table
 export interface MarinaImage {
-  id: number;
-  marina_id: number;
-  image_url: string;
-  title?: string;
-  display_order: number;
-  is_primary: boolean;
-  created_at: string;
+  url: string;
+  title: string;
+  isPrimary: boolean;
 }
 
 // Availability response
@@ -256,6 +252,13 @@ export interface PaymentIntentRequest {
   checkOut: string;
   couponCode?: string;
   specialRequests?: string;
+  /**
+   * Set to `true` when the request originates from the mobile app.
+   * When true, the server fetches the Stripe secret key from the `environment_keys`
+   * database table instead of the STRIPE_SECRET_KEY environment variable.
+   * Defaults to `false` (web).
+   */
+  isMobileApp?: boolean;
 }
 
 export interface PaymentIntentResponse {
@@ -276,6 +279,71 @@ export interface BookingConfirmationResponse {
     status: string;
     total_amount: number;
   };
+}
+
+// Marina / Private Port Registration (Become a Member)
+export interface MarinaRegistrationRequest {
+  // Host info
+  host_name: string;
+  host_email: string;
+  host_phone?: string;
+  company_name?: string;
+
+  // Venue type & basic info
+  business_type_id: number; // 1=Full Service, 2=Dry Storage, 3=Private Port, 4=Yacht Club
+  name: string;
+  description: string;
+  price_per_day: number;
+
+  // Location
+  address: string;
+  city: string;
+  state?: string;
+  country: string;
+  postal_code?: string;
+  latitude: number;
+  longitude: number;
+
+  // Contact
+  contact_name: string;
+  contact_email: string;
+  contact_phone?: string;
+  website_url?: string;
+
+  // Facilities
+  total_slips: number;
+  max_boat_length_meters?: number;
+  max_boat_draft_meters?: number;
+
+  // Marina features
+  has_fuel_dock?: boolean;
+  has_pump_out?: boolean;
+  has_haul_out?: boolean;
+  has_boat_ramp?: boolean;
+  has_dry_storage?: boolean;
+  has_live_aboard?: boolean;
+  accepts_transients?: boolean;
+  accepts_megayachts?: boolean;
+
+  // Amenities (IDs from amenity_types)
+  amenity_ids?: number[];
+
+  // Seabed info (references seabeds + seabed_types tables)
+  seabed_type_id?: number; // FK → seabed_types.id
+  seabed_depth_meters?: number;
+  seabed_description?: string;
+  seabed_notes?: string;
+
+  // Gallery images (uploaded via external API before submission)
+  cover_image_url?: string;
+  gallery_image_urls?: string[]; // JSON-serialised array stored in marinas.gallery_image_urls
+  temp_upload_id?: string; // Temp folder ID used for image uploads, e.g. "marina-temp-1234"
+}
+
+export interface MarinaRegistrationResponse {
+  success: boolean;
+  message: string;
+  marina_id?: number;
 }
 
 // API endpoint types

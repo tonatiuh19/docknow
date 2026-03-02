@@ -37,19 +37,23 @@ const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0,
 });
 
 async function query<T = any>(sql: string, values?: any[]): Promise<T> {
-  let connection;
   try {
-    connection = await pool.getConnection();
-    const [results] = await connection.execute(sql, values);
+    const [results] = await pool.execute(sql, values);
     return results as T;
-  } catch (error) {
+  } catch (error: any) {
     console.error("Database query error:", error);
+    // Single retry on connection reset
+    if (error.code === "ECONNRESET" || error.errno === -54) {
+      console.log("Connection reset, retrying...");
+      const [results] = await pool.execute(sql, values);
+      return results as T;
+    }
     throw error;
-  } finally {
-    if (connection) connection.release();
   }
 }
 
@@ -75,9 +79,219 @@ async function verifyToken(token: string): Promise<any> {
 if (!process.env.STRIPE_SECRET_KEY) {
   console.error("STRIPE_SECRET_KEY is not configured");
 }
+// Web-default Stripe client — uses the server env var STRIPE_SECRET_KEY.
+// Used for webhooks, host-portal payment retrieval, and all web requests.
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
   apiVersion: "2026-01-28.clover",
 });
+
+/**
+ * Returns the correct Stripe client based on the caller type.
+ *
+ * - Web  (isMobileApp = false): uses the singleton above (env var STRIPE_SECRET_KEY)
+ * - App  (isMobileApp = true) : fetches the secret key from the `environment_keys`
+ *   DB table so keys can be rotated without a server re-deploy.
+ */
+async function getStripeClient(isMobileApp: boolean): Promise<Stripe> {
+  if (!isMobileApp) {
+    return stripe;
+  }
+  const useTestMode = process.env.NODE_ENV !== "production";
+  const rows = await query<EnvironmentKey[]>(
+    `SELECT key_string
+     FROM environment_keys
+     WHERE title = 'stripe' AND type = 'secret' AND is_test = ?
+     LIMIT 1`,
+    [useTestMode ? 1 : 0],
+  );
+  const secretKey = rows[0]?.key_string ?? "";
+  if (!secretKey) {
+    throw new Error(
+      "App Stripe secret key is not configured in the environment_keys table",
+    );
+  }
+  return new Stripe(secretKey, { apiVersion: "2026-01-28.clover" });
+}
+
+// ============= ENVIRONMENT KEYS HANDLERS =============
+
+interface EnvironmentKey extends RowDataPacket {
+  id: number;
+  title: string;
+  type: string;
+  key_string: string;
+  is_test: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * GET /api/payments/config
+ * Returns the Stripe publishable key loaded from the DB.
+ */
+const handleGetPaymentsConfig = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const useTestMode = process.env.NODE_ENV !== "production";
+    const testFlag = useTestMode ? 1 : 0;
+
+    const rows = await query<EnvironmentKey[]>(
+      `SELECT key_string
+       FROM environment_keys
+       WHERE title = 'stripe'
+         AND type  = 'publishable'
+         AND is_test = ?
+       LIMIT 1`,
+      [testFlag],
+    );
+
+    const publishableKey = rows[0]?.key_string ?? "";
+
+    if (!publishableKey) {
+      res.status(500).json({
+        success: false,
+        error: "Stripe publishable key is not configured",
+      });
+      return;
+    }
+
+    res.json({ success: true, publishable_key: publishableKey });
+  } catch (error) {
+    console.error("[handleGetPaymentsConfig] Error:", error);
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to load Stripe config" });
+  }
+};
+
+/**
+ * GET /api/admin/environment-keys
+ * Lists all keys; secret values are masked for security.
+ */
+const handleGetEnvironmentKeys = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const rows = await query<EnvironmentKey[]>(
+      `SELECT
+         id, title, type,
+         CASE
+           WHEN LENGTH(key_string) > 4
+             THEN CONCAT(REPEAT('*', LENGTH(key_string) - 4), RIGHT(key_string, 4))
+           ELSE key_string
+         END AS key_string,
+         is_test, created_at, updated_at
+       FROM environment_keys
+       ORDER BY title, is_test DESC`,
+    );
+
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error("[handleGetEnvironmentKeys] Error:", error);
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to fetch environment keys" });
+  }
+};
+
+/**
+ * POST /api/admin/environment-keys
+ * Creates or updates an environment key.
+ * Body: { title, type, keyString, isTest }
+ */
+const handleUpsertEnvironmentKey = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const {
+      title,
+      type,
+      keyString,
+      isTest,
+    }: {
+      title: string;
+      type: string;
+      keyString: string;
+      isTest: boolean;
+    } = req.body;
+
+    if (!title || !type || keyString === undefined || isTest === undefined) {
+      res.status(400).json({
+        success: false,
+        error: "title, type, keyString, and isTest are required",
+      });
+      return;
+    }
+
+    const testFlag = isTest ? 1 : 0;
+
+    const rows = await query<EnvironmentKey[]>(
+      `SELECT id
+       FROM environment_keys
+       WHERE title = ?
+         AND type  = ?
+         AND is_test = ?
+       LIMIT 1`,
+      [title, type, testFlag],
+    );
+
+    if (rows.length > 0) {
+      await query<ResultSetHeader>(
+        `UPDATE environment_keys
+         SET key_string = ?, updated_at = NOW()
+         WHERE id = ?`,
+        [keyString, rows[0].id],
+      );
+    } else {
+      await query<ResultSetHeader>(
+        `INSERT INTO environment_keys (title, type, key_string, is_test)
+         VALUES (?, ?, ?, ?)`,
+        [title, type, keyString, testFlag],
+      );
+    }
+
+    res.json({ success: true, message: "Environment key saved successfully" });
+  } catch (error) {
+    console.error("[handleUpsertEnvironmentKey] Error:", error);
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to save environment key" });
+  }
+};
+
+/**
+ * DELETE /api/admin/environment-keys/:id
+ */
+const handleDeleteEnvironmentKey = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    if (!id || isNaN(Number(id))) {
+      res
+        .status(400)
+        .json({ success: false, error: "Valid id param required" });
+      return;
+    }
+
+    await query<ResultSetHeader>(`DELETE FROM environment_keys WHERE id = ?`, [
+      Number(id),
+    ]);
+
+    res.json({ success: true, message: "Environment key deleted" });
+  } catch (error) {
+    console.error("[handleDeleteEnvironmentKey] Error:", error);
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to delete environment key" });
+  }
+};
 
 // =====================================================
 // EMAIL HELPERS
@@ -126,22 +340,23 @@ async function sendGuestVerificationEmail(
           * { margin: 0; padding: 0; box-sizing: border-box; }
           body { 
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
-            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            background: linear-gradient(135deg, #020617 0%, #0f1729 100%);
             padding: 40px 20px;
             line-height: 1.6;
           }
           .email-wrapper { max-width: 600px; margin: 0 auto; }
           .container { 
-            background: white; 
-            border-radius: 16px; 
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+            background: #0f1729; 
+            border-radius: 20px; 
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(14, 165, 233, 0.1);
             overflow: hidden;
           }
           .header { 
-            background: linear-gradient(135deg, #0c4a6e 0%, #075985 50%, #0369a1 100%);
+            background: linear-gradient(135deg, #020617 0%, #1d2839 60%, #344156 100%);
             color: white; 
-            padding: 40px 30px;
+            padding: 45px 30px;
             text-align: center;
+            border-bottom: 1px solid rgba(14, 165, 233, 0.2);
           }
           .logo-img {
             width: 120px;
@@ -153,35 +368,36 @@ async function sendGuestVerificationEmail(
             font-size: 32px; 
             font-weight: 700; 
             margin: 10px 0 5px;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
           }
           .header p { 
             font-size: 16px; 
-            opacity: 0.95;
+            color: rgba(148, 163, 184, 0.95);
             font-weight: 500;
           }
           .content { 
             padding: 40px 30px;
+            background: #0f1729;
           }
           .greeting {
             font-size: 24px;
-            color: #1e293b;
-            font-weight: 600;
+            color: #f1f5f9;
+            font-weight: 700;
             margin-bottom: 10px;
           }
           .message {
             font-size: 16px;
-            color: #475569;
+            color: #94a3b8;
             margin-bottom: 30px;
           }
           .code-container {
-            background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
+            background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
             border-radius: 16px;
             padding: 40px 30px;
             text-align: center;
             margin: 35px 0;
-            box-shadow: 0 8px 32px rgba(14, 165, 233, 0.25);
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 40px rgba(14, 165, 233, 0.35);
+            border: 1px solid rgba(14, 165, 233, 0.3);
           }
           .code-label {
             font-size: 11px;
@@ -197,31 +413,31 @@ async function sendGuestVerificationEmail(
             color: #ffffff;
             letter-spacing: 16px;
             font-family: 'Courier New', monospace;
-            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
             padding: 15px;
             background: rgba(255, 255, 255, 0.15);
             border-radius: 12px;
             display: inline-block;
           }
           .info-box {
-            background: #f8fafc;
-            border: 2px solid #e2e8f0;
+            background: #1d2839;
+            border: 1px solid #344156;
             border-radius: 12px;
             padding: 25px;
             margin: 30px 0;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
           }
           .info-item {
             display: flex;
             align-items: flex-start;
-            margin-bottom: 16px;
+            margin-bottom: 12px;
             font-size: 14px;
-            color: #475569;
-            background: white;
+            color: #94a3b8;
+            background: #0f1729;
             padding: 12px 16px;
             border-radius: 8px;
             border-left: 3px solid #0ea5e9;
           }
+          .info-item strong { color: #f1f5f9; }
           .info-item:last-child {
             margin-bottom: 0;
           }
@@ -230,8 +446,8 @@ async function sendGuestVerificationEmail(
             font-size: 18px;
           }
           .security-note {
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
+            background: #1d2839;
+            border: 1px solid #344156;
             border-radius: 8px;
             padding: 16px;
             margin-top: 25px;
@@ -240,30 +456,30 @@ async function sendGuestVerificationEmail(
             text-align: center;
           }
           .footer { 
-            background: #f8fafc;
-            color: #64748b; 
+            background: #020617;
+            color: #475569; 
             font-size: 13px; 
             text-align: center; 
             padding: 30px;
-            border-top: 1px solid #e2e8f0;
+            border-top: 1px solid #1d2839;
           }
           .footer-brand {
             font-size: 16px;
-            font-weight: 600;
+            font-weight: 700;
             color: #0ea5e9;
             margin-bottom: 5px;
           }
           .footer-tagline {
-            color: #94a3b8;
+            color: #475569;
             margin-bottom: 15px;
           }
           .footer-links {
             margin-top: 15px;
             padding-top: 15px;
-            border-top: 1px solid #e2e8f0;
+            border-top: 1px solid #1d2839;
           }
           .footer-link {
-            color: #0ea5e9;
+            color: #38bdf8;
             text-decoration: none;
             margin: 0 10px;
           }
@@ -380,37 +596,37 @@ async function sendBookingConfirmationEmail(
           * { margin: 0; padding: 0; box-sizing: border-box; }
           body { 
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
-            background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+            background: linear-gradient(135deg, #020617 0%, #0f1729 100%);
             padding: 40px 20px;
             line-height: 1.6;
           }
           .email-wrapper { max-width: 650px; margin: 0 auto; }
           .container { 
-            background: white; 
+            background: #0f1729; 
             border-radius: 20px; 
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.12);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(14, 165, 233, 0.12);
             overflow: hidden;
           }
           .header { 
-            background: linear-gradient(135deg, #047857 0%, #065f46 50%, #064e3b 100%);
+            background: linear-gradient(135deg, #020617 0%, #1d2839 60%, #344156 100%);
             color: white; 
             padding: 50px 40px;
             text-align: center;
             position: relative;
+            border-bottom: 1px solid rgba(14, 165, 233, 0.2);
           }
           .success-icon {
             width: 100px;
             height: 100px;
-            background: rgba(255, 255, 255, 0.25);
+            background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
             border-radius: 50%;
             margin: 0 auto 25px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 64px;
-            backdrop-filter: blur(10px);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
-            border: 3px solid rgba(255, 255, 255, 0.4);
+            font-size: 52px;
+            box-shadow: 0 8px 40px rgba(14, 165, 233, 0.4);
+            border: 3px solid rgba(56, 189, 248, 0.4);
             color: white;
             font-weight: bold;
           }
@@ -418,39 +634,41 @@ async function sendBookingConfirmationEmail(
             font-size: 36px; 
             font-weight: 800; 
             margin-bottom: 10px;
-            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
           }
           .header p { 
             font-size: 18px; 
-            opacity: 0.95;
+            color: rgba(148, 163, 184, 0.95);
             font-weight: 500;
           }
           .content { 
             padding: 45px 40px;
+            background: #0f1729;
           }
           .greeting {
             font-size: 28px;
-            color: #1e293b;
+            color: #f1f5f9;
             font-weight: 700;
             margin-bottom: 15px;
           }
           .message {
             font-size: 17px;
-            color: #475569;
+            color: #94a3b8;
             margin-bottom: 35px;
             line-height: 1.7;
           }
+          .message strong { color: #38bdf8; }
           .booking-card {
-            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            background: #1d2839;
             border-radius: 16px;
             padding: 35px;
             margin: 35px 0;
-            border: 2px solid #e2e8f0;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+            border: 1px solid #344156;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
           }
           .booking-id {
             display: inline-block;
-            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
             color: white;
             padding: 8px 20px;
             border-radius: 20px;
@@ -458,14 +676,14 @@ async function sendBookingConfirmationEmail(
             font-weight: 700;
             letter-spacing: 1px;
             margin-bottom: 25px;
-            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+            box-shadow: 0 4px 16px rgba(14, 165, 233, 0.35);
           }
           .detail-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
             padding: 18px 0;
-            border-bottom: 1px solid #e2e8f0;
+            border-bottom: 1px solid #344156;
           }
           .detail-row:last-child {
             border-bottom: none;
@@ -480,17 +698,18 @@ async function sendBookingConfirmationEmail(
           }
           .detail-value {
             font-size: 16px;
-            color: #0f172a;
+            color: #f1f5f9;
             font-weight: 700;
           }
           .total-row {
-            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
             margin: 25px -35px -35px;
             padding: 25px 35px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             border-radius: 0 0 14px 14px;
+            box-shadow: 0 -4px 20px rgba(14, 165, 233, 0.2);
           }
           .total-label {
             font-size: 16px;
@@ -505,16 +724,15 @@ async function sendBookingConfirmationEmail(
           .features-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 20px;
+            gap: 16px;
             margin: 35px 0;
           }
           .feature-card {
             text-align: center;
             padding: 25px 20px;
-            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            background: #1d2839;
             border-radius: 12px;
-            border: 2px solid #fbbf24;
-            transition: transform 0.2s;
+            border: 1px solid #344156;
           }
           .feature-icon {
             font-size: 36px;
@@ -523,11 +741,11 @@ async function sendBookingConfirmationEmail(
           .feature-title {
             font-size: 14px;
             font-weight: 700;
-            color: #78350f;
+            color: #38bdf8;
           }
           .cta-button {
             display: block;
-            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
             color: white;
             text-decoration: none;
             padding: 18px 40px;
@@ -536,12 +754,11 @@ async function sendBookingConfirmationEmail(
             font-size: 16px;
             text-align: center;
             margin: 35px 0;
-            box-shadow: 0 8px 24px rgba(16, 185, 129, 0.35);
-            transition: transform 0.2s;
+            box-shadow: 0 8px 32px rgba(14, 165, 233, 0.4);
           }
           .support-box {
-            background: #f0fdf4;
-            border: 2px solid #86efac;
+            background: #1d2839;
+            border: 1px solid #344156;
             border-radius: 12px;
             padding: 25px;
             margin-top: 30px;
@@ -549,35 +766,36 @@ async function sendBookingConfirmationEmail(
           }
           .support-text {
             font-size: 14px;
-            color: #166534;
+            color: #94a3b8;
             margin-bottom: 15px;
           }
+          .support-text strong { color: #f1f5f9; }
           .footer { 
-            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-            color: #64748b; 
+            background: #020617;
+            color: #475569; 
             font-size: 13px; 
             text-align: center; 
             padding: 35px 40px;
-            border-top: 2px solid #e2e8f0;
+            border-top: 1px solid #1d2839;
           }
           .footer-brand {
             font-size: 18px;
             font-weight: 700;
-            color: #10b981;
+            color: #0ea5e9;
             margin-bottom: 8px;
           }
           .footer-tagline {
-            color: #94a3b8;
+            color: #475569;
             margin-bottom: 20px;
             font-size: 14px;
           }
           .footer-links {
             margin-top: 20px;
             padding-top: 20px;
-            border-top: 1px solid #e2e8f0;
+            border-top: 1px solid #1d2839;
           }
           .footer-link {
-            color: #10b981;
+            color: #38bdf8;
             text-decoration: none;
             margin: 0 12px;
             font-weight: 500;
@@ -723,22 +941,23 @@ async function sendHostVerificationEmail(
           * { margin: 0; padding: 0; box-sizing: border-box; }
           body { 
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
-            background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
+            background: linear-gradient(135deg, #020617 0%, #0f1729 100%);
             padding: 40px 20px;
             line-height: 1.6;
           }
           .email-wrapper { max-width: 600px; margin: 0 auto; }
           .container { 
-            background: white; 
-            border-radius: 16px; 
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+            background: #0f1729; 
+            border-radius: 20px; 
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(14, 165, 233, 0.1);
             overflow: hidden;
           }
           .header { 
-            background: linear-gradient(135deg, #6d28d9 0%, #5b21b6 50%, #4c1d95 100%);
+            background: linear-gradient(135deg, #020617 0%, #1d2839 60%, #344156 100%);
             color: white; 
-            padding: 40px 30px;
+            padding: 45px 30px;
             text-align: center;
+            border-bottom: 1px solid rgba(14, 165, 233, 0.2);
           }
           .logo-img {
             width: 120px;
@@ -748,7 +967,7 @@ async function sendHostVerificationEmail(
           }
           .badge {
             display: inline-block;
-            background: rgba(255, 255, 255, 0.25);
+            background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
             padding: 6px 16px;
             border-radius: 20px;
             font-size: 12px;
@@ -756,40 +975,42 @@ async function sendHostVerificationEmail(
             text-transform: uppercase;
             letter-spacing: 1px;
             margin-top: 10px;
+            box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
           }
           .header h1 { 
             font-size: 32px; 
             font-weight: 700; 
             margin: 10px 0 5px;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
           }
           .header p { 
             font-size: 16px; 
-            opacity: 0.95;
+            color: rgba(148, 163, 184, 0.95);
             font-weight: 500;
           }
           .content { 
             padding: 40px 30px;
+            background: #0f1729;
           }
           .greeting {
             font-size: 24px;
-            color: #1e293b;
-            font-weight: 600;
+            color: #f1f5f9;
+            font-weight: 700;
             margin-bottom: 10px;
           }
           .message {
             font-size: 16px;
-            color: #475569;
+            color: #94a3b8;
             margin-bottom: 30px;
           }
           .code-container {
-            background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%);
+            background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
             border-radius: 16px;
             padding: 40px 30px;
             text-align: center;
             margin: 35px 0;
-            box-shadow: 0 8px 32px rgba(139, 92, 246, 0.25);
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 40px rgba(14, 165, 233, 0.35);
+            border: 1px solid rgba(14, 165, 233, 0.3);
           }
           .code-label {
             font-size: 11px;
@@ -805,31 +1026,31 @@ async function sendHostVerificationEmail(
             color: #ffffff;
             letter-spacing: 16px;
             font-family: 'Courier New', monospace;
-            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
             padding: 15px;
             background: rgba(255, 255, 255, 0.15);
             border-radius: 12px;
             display: inline-block;
           }
           .info-box {
-            background: #faf5ff;
-            border: 2px solid #e9d5ff;
+            background: #1d2839;
+            border: 1px solid #344156;
             border-radius: 12px;
             padding: 25px;
             margin: 30px 0;
-            box-shadow: 0 2px 8px rgba(139, 92, 246, 0.08);
           }
           .info-item {
             display: flex;
             align-items: flex-start;
-            margin-bottom: 16px;
+            margin-bottom: 12px;
             font-size: 14px;
-            color: #475569;
-            background: white;
+            color: #94a3b8;
+            background: #0f1729;
             padding: 12px 16px;
             border-radius: 8px;
-            border-left: 3px solid #8b5cf6;
+            border-left: 3px solid #0ea5e9;
           }
+          .info-item strong { color: #f1f5f9; }
           .info-item:last-child {
             margin-bottom: 0;
           }
@@ -846,9 +1067,9 @@ async function sendHostVerificationEmail(
             flex: 1;
             text-align: center;
             padding: 20px 15px;
-            background: #faf5ff;
+            background: #1d2839;
             border-radius: 10px;
-            border: 1px solid #e9d5ff;
+            border: 1px solid #344156;
           }
           .feature-icon {
             font-size: 32px;
@@ -857,11 +1078,11 @@ async function sendHostVerificationEmail(
           .feature-title {
             font-size: 13px;
             font-weight: 600;
-            color: #6d28d9;
+            color: #38bdf8;
           }
           .security-note {
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
+            background: #1d2839;
+            border: 1px solid #344156;
             border-radius: 8px;
             padding: 16px;
             margin-top: 25px;
@@ -870,30 +1091,30 @@ async function sendHostVerificationEmail(
             text-align: center;
           }
           .footer { 
-            background: #faf5ff;
-            color: #64748b; 
+            background: #020617;
+            color: #475569; 
             font-size: 13px; 
             text-align: center; 
             padding: 30px;
-            border-top: 1px solid #e9d5ff;
+            border-top: 1px solid #1d2839;
           }
           .footer-brand {
             font-size: 16px;
-            font-weight: 600;
-            color: #8b5cf6;
+            font-weight: 700;
+            color: #0ea5e9;
             margin-bottom: 5px;
           }
           .footer-tagline {
-            color: #94a3b8;
+            color: #475569;
             margin-bottom: 15px;
           }
           .footer-links {
             margin-top: 15px;
             padding-top: 15px;
-            border-top: 1px solid #e9d5ff;
+            border-top: 1px solid #1d2839;
           }
           .footer-link {
-            color: #8b5cf6;
+            color: #38bdf8;
             text-decoration: none;
             margin: 0 10px;
           }
@@ -2062,6 +2283,7 @@ const handleHostMarinaManagement = async (
       seabeds,
       moorings,
       points,
+      images,
     ] = await Promise.all([
       query<RowDataPacket[]>(
         `SELECT s.id, s.marina_id, s.slip_number, s.length_meters, s.width_meters, s.depth_meters,
@@ -2132,6 +2354,12 @@ const handleHostMarinaManagement = async (
          ORDER BY p.marina_id, p.name`,
         marinaIds,
       ),
+      query<RowDataPacket[]>(
+        `SELECT m.id as marina_id, m.cover_image_url, m.gallery_image_urls
+         FROM marinas m
+         WHERE m.id IN (${inPlaceholders})`,
+        marinaIds,
+      ),
     ]);
 
     const toNumber = (value: any) => {
@@ -2159,6 +2387,7 @@ const handleHostMarinaManagement = async (
     const seabedsByMarina = groupByMarina(seabeds);
     const mooringsByMarina = groupByMarina(moorings);
     const pointsByMarina = groupByMarina(points);
+    const imagesByMarina = groupByMarina(images);
 
     const buildPriceRange = (values: number[]) => {
       if (!values.length) return { min: null, max: null };
@@ -2267,6 +2496,33 @@ const handleHostMarinaManagement = async (
         updated_at: row.updated_at,
       }));
 
+      const marinaImgRow = (imagesByMarina.get(marinaId) || [])[0];
+      const marinaGalleryUrls: string[] = marinaImgRow?.gallery_image_urls
+        ? JSON.parse(marinaImgRow.gallery_image_urls)
+        : [];
+      const marinaImages = [
+        ...(marinaImgRow?.cover_image_url
+          ? [
+              {
+                id: 0,
+                image_url: marinaImgRow.cover_image_url as string,
+                title: null as string | null,
+                display_order: 0,
+                is_primary: true,
+                created_at: null as string | null,
+              },
+            ]
+          : []),
+        ...marinaGalleryUrls.map((url: string, i: number) => ({
+          id: i + 1,
+          image_url: url,
+          title: null as string | null,
+          display_order: i + 1,
+          is_primary: false,
+          created_at: null as string | null,
+        })),
+      ];
+
       return {
         id: marinaId,
         name: marina.name,
@@ -2299,6 +2555,7 @@ const handleHostMarinaManagement = async (
         seabeds: marinaSeabeds,
         moorings: marinaMoorings,
         points: marinaPoints,
+        images: marinaImages,
         pricing: {
           slips: buildPriceRange(marinaSlips.map((item) => item.price_per_day)),
           moorings: buildPriceRange(
@@ -3036,6 +3293,112 @@ const handleManageHostPoints = async (
   }
 };
 
+const handleManageHostMarinaImages = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
+  try {
+    const hostId = Number((req as any).authHostId);
+    const { action, marinaId, imageUrl, image } = req.body;
+
+    if (!action) {
+      return res
+        .status(400)
+        .json({ success: false, error: "action is required" });
+    }
+
+    if (action === "create") {
+      if (!marinaId || !image?.image_url) {
+        return res.status(400).json({
+          success: false,
+          error: "marinaId and image.image_url are required",
+        });
+      }
+
+      const id = Number(marinaId);
+      const hasAccess = await hasHostMarinaAccess(hostId, id);
+      if (!hasAccess) {
+        return res.status(403).json({ success: false, error: "Unauthorized" });
+      }
+
+      const isPrimary = parseOptionalBoolean(image.is_primary) ?? false;
+
+      if (isPrimary) {
+        // Store as cover image
+        await query(`UPDATE marinas SET cover_image_url = ? WHERE id = ?`, [
+          image.image_url,
+          id,
+        ]);
+      } else {
+        // Append to gallery_image_urls JSON array
+        const rows = await query<RowDataPacket[]>(
+          `SELECT gallery_image_urls FROM marinas WHERE id = ? LIMIT 1`,
+          [id],
+        );
+        const existing: string[] = rows[0]?.gallery_image_urls
+          ? JSON.parse(rows[0].gallery_image_urls)
+          : [];
+        existing.push(image.image_url);
+        await query(`UPDATE marinas SET gallery_image_urls = ? WHERE id = ?`, [
+          JSON.stringify(existing),
+          id,
+        ]);
+      }
+
+      return res.status(201).json({ success: true, imageUrl: image.image_url });
+    }
+
+    if (action === "delete") {
+      if (!marinaId || !imageUrl) {
+        return res.status(400).json({
+          success: false,
+          error: "marinaId and imageUrl are required",
+        });
+      }
+
+      const id = Number(marinaId);
+      const hasAccess = await hasHostMarinaAccess(hostId, id);
+      if (!hasAccess) {
+        return res.status(403).json({ success: false, error: "Unauthorized" });
+      }
+
+      const rows = await query<RowDataPacket[]>(
+        `SELECT cover_image_url, gallery_image_urls FROM marinas WHERE id = ? LIMIT 1`,
+        [id],
+      );
+      if (!rows.length) {
+        return res
+          .status(404)
+          .json({ success: false, error: "Marina not found" });
+      }
+
+      if (rows[0].cover_image_url === imageUrl) {
+        await query(`UPDATE marinas SET cover_image_url = NULL WHERE id = ?`, [
+          id,
+        ]);
+      } else {
+        const gallery: string[] = rows[0].gallery_image_urls
+          ? JSON.parse(rows[0].gallery_image_urls)
+          : [];
+        const updated = gallery.filter((u) => u !== imageUrl);
+        await query(`UPDATE marinas SET gallery_image_urls = ? WHERE id = ?`, [
+          JSON.stringify(updated),
+          id,
+        ]);
+      }
+
+      return res.json({ success: true });
+    }
+
+    return res.status(400).json({ success: false, error: "Invalid action" });
+  } catch (error) {
+    console.error("Error managing marina images:", error);
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to manage marina images" });
+  }
+};
+
 /**
  * GET /api/host/guests
  * Get all guests who have booked at host's marinas
@@ -3763,10 +4126,10 @@ const handleAdminGetHosts = async (
     const assignedHostIds = assignedHosts.map((h) => h.id);
     const availableHosts = await query<RowDataPacket[]>(
       `SELECT h.id, h.full_name, h.email, h.phone, h.created_at,
-       COUNT(CASE WHEN h2.marina_id IS NOT NULL THEN 1 END) as marina_count
+       CASE WHEN h.marina_id IS NOT NULL THEN 1 ELSE 0 END as marina_count
        FROM hosts h
-       LEFT JOIN hosts h2 ON h.id = h2.id
-       WHERE h.is_active = 1 AND (h.marina_id IS NULL ${marinaId ? `OR h.marina_id != ?` : ""})
+       WHERE h.is_active = 1
+       ${marinaId ? `AND (h.marina_id IS NULL OR h.marina_id != ?)` : ""}
        ${assignedHostIds.length > 0 ? `AND h.id NOT IN (${assignedHostIds.map(() => "?").join(",")})` : ""}
        GROUP BY h.id, h.full_name, h.email, h.phone, h.created_at
        ORDER BY h.created_at DESC`,
@@ -3796,7 +4159,7 @@ const handleAdminCreateHost = async (
 ) => {
   try {
     const creatorHostId = (req as any).authHostId;
-    const { email, fullName, phone } = req.body;
+    const { email, fullName, phone, marinaId, role } = req.body;
 
     if (!email || !fullName) {
       return res.status(400).json({
@@ -3818,11 +4181,25 @@ const handleAdminCreateHost = async (
       });
     }
 
+    // If a marina is specified, verify the creator owns it
+    if (marinaId) {
+      const marinaCheck = await query<RowDataPacket[]>(
+        `SELECT id FROM marinas WHERE id = ? AND host_id = ?`,
+        [marinaId, creatorHostId],
+      );
+      if (marinaCheck.length === 0) {
+        return res.status(403).json({
+          success: false,
+          error: "Unauthorized to assign hosts to this marina",
+        });
+      }
+    }
+
     // Create the new host
     const result = await query<ResultSetHeader>(
-      `INSERT INTO hosts (email, full_name, phone, is_active, email_verified)
-       VALUES (?, ?, ?, 1, 0)`,
-      [email, fullName, phone || null],
+      `INSERT INTO hosts (email, full_name, phone, marina_id, role, is_active, email_verified)
+       VALUES (?, ?, ?, ?, ?, 1, 0)`,
+      [email, fullName, phone || null, marinaId || null, role || "manager"],
     );
 
     const newHostId = result.insertId;
@@ -3835,8 +4212,10 @@ const handleAdminCreateHost = async (
         email,
         full_name: fullName,
         phone,
+        marina_id: marinaId || null,
+        role: role || "manager",
         created_at: new Date().toISOString(),
-        marina_count: 0,
+        marina_count: marinaId ? 1 : 0,
       },
     });
   } catch (error) {
@@ -4513,6 +4892,396 @@ async function sendSupportTicketConfirmationEmail(
 // =====================================================
 
 /**
+ * Send marina registration notification emails (to host + admin)
+ */
+async function sendMarinaRegistrationEmails(
+  hostEmail: string,
+  hostName: string,
+  marinaName: string,
+  businessTypeName: string,
+  city: string,
+  country: string,
+): Promise<void> {
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASSWORD) {
+    console.log("📋 DEV MODE: Skipping registration emails (no SMTP config)");
+    return;
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST || "mail.disruptinglabs.com",
+    port: parseInt(process.env.SMTP_PORT || "465"),
+    secure: true,
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASSWORD,
+    },
+  });
+
+  const welcomeHtml = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: #020617; padding: 40px 20px; }
+        .container { max-width: 600px; margin: 0 auto; background: #0f1729; border-radius: 20px; overflow: hidden; border: 1px solid rgba(14,165,233,0.15); }
+        .header { background: linear-gradient(135deg, #020617 0%, #0c4a6e 100%); padding: 50px 40px; text-align: center; }
+        .logo { width: 120px; height: auto; margin: 0 auto 20px; display: block; }
+        .header h1 { color: #fff; font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+        .header p { color: rgba(148,163,184,0.9); font-size: 16px; }
+        .content { padding: 40px; }
+        .greeting { font-size: 22px; color: #f1f5f9; font-weight: 700; margin-bottom: 12px; }
+        .text { color: #94a3b8; font-size: 15px; line-height: 1.7; margin-bottom: 20px; }
+        .card { background: rgba(14,165,233,0.08); border: 1px solid rgba(14,165,233,0.2); border-radius: 14px; padding: 24px; margin: 24px 0; }
+        .card-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #0ea5e9; margin-bottom: 6px; }
+        .card-value { font-size: 20px; font-weight: 700; color: #fff; }
+        .steps { list-style: none; padding: 0; margin: 0; }
+        .steps li { padding: 14px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .steps li:last-child { border: none; }
+        .step-num { font-size: 22px; font-weight: 800; color: #0ea5e9; width: 32px; vertical-align: top; padding-top: 1px; }
+        .step-text { color: #94a3b8; font-size: 14px; line-height: 1.6; padding-left: 10px; vertical-align: top; }
+        .step-text strong { color: #e2e8f0; }
+        .footer { text-align: center; padding: 30px 40px; border-top: 1px solid rgba(255,255,255,0.05); }
+        .footer p { color: #475569; font-size: 13px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <img src="https://garbrix.com/navios/assets/images/logo.png" alt="DockNow" class="logo" />
+          <h1>Welcome to DockNow!</h1>
+          <p>Your application has been received</p>
+        </div>
+        <div class="content">
+          <div class="greeting">Hi ${hostName},</div>
+          <p class="text">
+            Thank you for joining DockNow! We've received your application to list
+            <strong style="color: #e2e8f0;">${marinaName}</strong> — a ${businessTypeName} in ${city}, ${country}.
+          </p>
+          <div class="card">
+            <div class="card-label">Your Venue</div>
+            <div class="card-value">${marinaName}</div>
+            <div style="color: #64748b; font-size: 14px; margin-top: 6px;">${businessTypeName} · ${city}, ${country}</div>
+          </div>
+          <p class="text">Here's what happens next:</p>
+          <ul class="steps">
+            <li>
+              <table width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+                <td class="step-num">1.</td>
+                <td class="step-text"><strong>Review</strong> — Our team will review your listing within 1–2 business days.</td>
+              </tr></table>
+            </li>
+            <li>
+              <table width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+                <td class="step-num">2.</td>
+                <td class="step-text"><strong>Approval &amp; credentials</strong> — You'll receive your host portal login details once approved.</td>
+              </tr></table>
+            </li>
+            <li>
+              <table width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+                <td class="step-num">3.</td>
+                <td class="step-text"><strong>Go live</strong> — Your listing goes live and boaters worldwide can start booking.</td>
+              </tr></table>
+            </li>
+          </ul>
+          <p class="text" style="margin-top: 20px;">
+            In the meantime, if you have any questions don't hesitate to reach out to us at
+            <a href="mailto:support@docknow.app" style="color: #0ea5e9;">support@docknow.app</a>.
+          </p>
+        </div>
+        <div class="footer">
+          <p><strong style="color: #94a3b8;">DockNow Team</strong></p>
+          <p style="margin-top: 4px;">&copy; ${new Date().getFullYear()} DockNow. All rights reserved.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  // Welcome email to host
+  await transporter.sendMail({
+    from: process.env.SMTP_FROM || `"DockNow" <${process.env.SMTP_USER}>`,
+    to: hostEmail,
+    subject: `Welcome to DockNow — ${marinaName} application received`,
+    html: welcomeHtml,
+  });
+
+  // Admin notification
+  const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER;
+  if (adminEmail) {
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM || `"DockNow" <${process.env.SMTP_USER}>`,
+      to: adminEmail,
+      subject: `[DockNow Admin] New marina registration: ${marinaName}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #0ea5e9;">New Marina Registration</h2>
+          <table style="width: 100%; border-collapse: collapse; margin-top: 16px;">
+            <tr><td style="padding: 8px; border: 1px solid #e2e8f0; font-weight: bold;">Venue Name</td><td style="padding: 8px; border: 1px solid #e2e8f0;">${marinaName}</td></tr>
+            <tr><td style="padding: 8px; border: 1px solid #e2e8f0; font-weight: bold;">Type</td><td style="padding: 8px; border: 1px solid #e2e8f0;">${businessTypeName}</td></tr>
+            <tr><td style="padding: 8px; border: 1px solid #e2e8f0; font-weight: bold;">Location</td><td style="padding: 8px; border: 1px solid #e2e8f0;">${city}, ${country}</td></tr>
+            <tr><td style="padding: 8px; border: 1px solid #e2e8f0; font-weight: bold;">Host Name</td><td style="padding: 8px; border: 1px solid #e2e8f0;">${hostName}</td></tr>
+            <tr><td style="padding: 8px; border: 1px solid #e2e8f0; font-weight: bold;">Host Email</td><td style="padding: 8px; border: 1px solid #e2e8f0;">${hostEmail}</td></tr>
+          </table>
+          <p style="margin-top: 16px; color: #64748b;">Please review and approve this listing in the admin dashboard.</p>
+        </div>
+      `,
+    });
+  }
+}
+
+/**
+ * POST /api/marina-registration
+ * Public endpoint — submit a marina or private port for review.
+ * Creates the marina with is_active = 0 and a pending host account.
+ * Sends welcome + admin notification emails.
+ */
+const handleMarinaRegistration = async (req: Request, res: Response) => {
+  try {
+    const {
+      host_name,
+      host_email,
+      host_phone,
+      company_name,
+      business_type_id,
+      name,
+      description,
+      price_per_day,
+      address,
+      city,
+      state,
+      country,
+      postal_code,
+      latitude,
+      longitude,
+      contact_name,
+      contact_email,
+      contact_phone,
+      website_url,
+      total_slips,
+      max_boat_length_meters,
+      max_boat_draft_meters,
+      has_fuel_dock,
+      has_pump_out,
+      has_haul_out,
+      has_boat_ramp,
+      has_dry_storage,
+      has_live_aboard,
+      accepts_transients,
+      accepts_megayachts,
+      amenity_ids,
+      seabed_type_id,
+      seabed_depth_meters,
+      seabed_description,
+      seabed_notes,
+      cover_image_url,
+      gallery_image_urls,
+    } = req.body;
+
+    // Validate required fields
+    if (
+      !host_name ||
+      !host_email ||
+      !name ||
+      !description ||
+      !city ||
+      !country ||
+      !latitude ||
+      !longitude
+    ) {
+      return res
+        .status(400)
+        .json({ success: false, error: "Missing required fields" });
+    }
+
+    // Generate slug from marina name
+    const slugBase = name
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .trim();
+
+    // Ensure slug uniqueness
+    const existing = await query<RowDataPacket[]>(
+      "SELECT id FROM marinas WHERE slug LIKE ? LIMIT 10",
+      [`${slugBase}%`],
+    );
+    const slug = existing.length === 0 ? slugBase : `${slugBase}-${Date.now()}`;
+
+    // 1. Create the marina (inactive, not featured)
+    const marinaResult = await query<ResultSetHeader>(
+      `INSERT INTO marinas
+        (name, slug, description, business_type_id, price_per_day,
+         city, state, country, address, postal_code,
+         latitude, longitude, contact_name, contact_email, contact_phone,
+         website_url, total_slips, available_slips,
+         max_boat_length_meters, max_boat_draft_meters,
+         is_active, is_featured)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)`,
+      [
+        name,
+        slug,
+        description,
+        business_type_id || 1,
+        parseFloat(price_per_day) || 0,
+        city,
+        state || null,
+        country,
+        address || null,
+        postal_code || null,
+        parseFloat(latitude),
+        parseFloat(longitude),
+        contact_name || host_name,
+        contact_email || host_email,
+        contact_phone || host_phone || null,
+        website_url || null,
+        parseInt(total_slips) || 0,
+        parseInt(total_slips) || 0,
+        max_boat_length_meters ? parseFloat(max_boat_length_meters) : null,
+        max_boat_draft_meters ? parseFloat(max_boat_draft_meters) : null,
+      ],
+    );
+
+    const marinaId = marinaResult.insertId;
+
+    // 2. Create marina features row
+    await query(
+      `INSERT INTO marina_features
+        (marina_id, has_fuel_dock, has_pump_out, has_haul_out, has_boat_ramp,
+         has_dry_storage, has_live_aboard, accepts_transients, accepts_megayachts)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        marinaId,
+        has_fuel_dock ? 1 : 0,
+        has_pump_out ? 1 : 0,
+        has_haul_out ? 1 : 0,
+        has_boat_ramp ? 1 : 0,
+        has_dry_storage ? 1 : 0,
+        has_live_aboard ? 1 : 0,
+        accepts_transients !== false ? 1 : 0,
+        accepts_megayachts ? 1 : 0,
+      ],
+    );
+
+    // 3. Insert amenities
+    if (Array.isArray(amenity_ids) && amenity_ids.length > 0) {
+      const placeholders = amenity_ids.map(() => "(?, ?)").join(", ");
+      const flatValues = amenity_ids.flatMap((id: number) => [marinaId, id]);
+      await query(
+        `INSERT INTO marina_amenities (marina_id, amenity_id) VALUES ${placeholders}`,
+        flatValues,
+      );
+    }
+
+    // 3a. Insert seabed (optional)
+    if (seabed_type_id) {
+      await query(
+        `INSERT INTO seabeds (marina_id, seabed_type_id, description, depth_meters, notes)
+         VALUES (?, ?, ?, ?, ?)`,
+        [
+          marinaId,
+          seabed_type_id,
+          seabed_description || null,
+          seabed_depth_meters ? parseFloat(seabed_depth_meters) : null,
+          seabed_notes || null,
+        ],
+      );
+    }
+
+    // 3b. Update image URLs (optional)
+    if (
+      cover_image_url ||
+      (Array.isArray(gallery_image_urls) && gallery_image_urls.length > 0)
+    ) {
+      await query(
+        `UPDATE marinas SET cover_image_url = ?, gallery_image_urls = ? WHERE id = ?`,
+        [
+          cover_image_url || null,
+          Array.isArray(gallery_image_urls) && gallery_image_urls.length > 0
+            ? JSON.stringify(gallery_image_urls)
+            : null,
+          marinaId,
+        ],
+      );
+    }
+
+    // 4. Create host account (inactive, not email-verified)
+    // Check if host with this email already exists
+    const existingHosts = await query<RowDataPacket[]>(
+      "SELECT id FROM hosts WHERE email = ? LIMIT 1",
+      [host_email],
+    );
+
+    let hostId: number;
+    if (existingHosts.length > 0) {
+      hostId = existingHosts[0].id;
+      // Link to new marina
+      await query("UPDATE hosts SET marina_id = ? WHERE id = ?", [
+        marinaId,
+        hostId,
+      ]);
+    } else {
+      const hostResult = await query<ResultSetHeader>(
+        `INSERT INTO hosts (marina_id, role, email, full_name, phone, company_name, is_active, email_verified)
+         VALUES (?, 'primary', ?, ?, ?, ?, 0, 0)`,
+        [
+          marinaId,
+          host_email,
+          host_name,
+          host_phone || null,
+          company_name || null,
+        ],
+      );
+      hostId = hostResult.insertId;
+    }
+
+    // 5. Link host to marina
+    await query("UPDATE marinas SET host_id = ? WHERE id = ?", [
+      hostId,
+      marinaId,
+    ]);
+
+    // 6. Fetch business type name for the email
+    const businessTypes = await query<RowDataPacket[]>(
+      "SELECT name FROM marina_business_types WHERE id = ? LIMIT 1",
+      [business_type_id || 1],
+    );
+    const businessTypeName = businessTypes[0]?.name || "Marina";
+
+    // 7. Send welcome + admin notification emails
+    try {
+      await sendMarinaRegistrationEmails(
+        host_email,
+        host_name,
+        name,
+        businessTypeName,
+        city,
+        country,
+      );
+    } catch (emailErr) {
+      console.error("⚠️ Failed to send registration emails:", emailErr);
+      // Non-fatal — continue
+    }
+
+    return res.status(201).json({
+      success: true,
+      message:
+        "Your venue has been submitted for review. Check your inbox for a welcome email!",
+      marina_id: marinaId,
+    });
+  } catch (error: any) {
+    console.error("Marina registration error:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Failed to submit registration. Please try again.",
+    });
+  }
+};
+
+/**
  * GET /api/marinas/search
  * Search for marinas with filters
  */
@@ -4785,8 +5554,8 @@ const handleMarinaSearch = async (req: Request, res: Response) => {
       (SELECT COUNT(*) FROM slips WHERE marina_id = m.id) as total_slips,
       (SELECT AVG(rating) FROM reviews WHERE marina_id = m.id) as avg_rating,
       (SELECT COUNT(*) FROM reviews WHERE marina_id = m.id) as review_count,
-      (SELECT image_url FROM marina_images WHERE marina_id = m.id AND is_primary = 1 LIMIT 1) as primary_image_url,
-      (SELECT COUNT(*) FROM marina_images WHERE marina_id = m.id) as total_images
+      m.cover_image_url as primary_image_url,
+      NULL as total_images
       FROM marinas m
       LEFT JOIN marina_business_types bt ON m.business_type_id = bt.id
       ${joins.join(" ")}
@@ -5098,9 +5867,7 @@ const handleMarinaDetails = async (req: Request, res: Response) => {
        (SELECT MAX(width_meters) FROM slips WHERE marina_id = m.id) as max_slip_width,
        (SELECT MAX(depth_meters) FROM slips WHERE marina_id = m.id) as max_slip_depth,
        (SELECT AVG(rating) FROM reviews WHERE marina_id = m.id) as avg_rating,
-       (SELECT COUNT(*) FROM reviews WHERE marina_id = m.id) as review_count,
-       (SELECT image_url FROM marina_images WHERE marina_id = m.id AND is_primary = 1 LIMIT 1) as primary_image_url,
-       (SELECT COUNT(*) FROM marina_images WHERE marina_id = m.id) as total_images
+       (SELECT COUNT(*) FROM reviews WHERE marina_id = m.id) as review_count
        FROM marinas m
        LEFT JOIN marina_business_types bt ON m.business_type_id = bt.id
        LEFT JOIN hosts h ON m.host_id = h.id
@@ -5116,14 +5883,26 @@ const handleMarinaDetails = async (req: Request, res: Response) => {
 
     const marina = marinas[0];
 
-    // Fetch marina images
-    const images = await query<RowDataPacket[]>(
-      `SELECT id, image_url as url, title, is_primary as isPrimary 
-       FROM marina_images 
-       WHERE marina_id = ? 
-       ORDER BY is_primary DESC, display_order ASC`,
-      [marina.id],
-    );
+    // Build images from inline columns (cover_image_url + gallery_image_urls JSON array)
+    const galleryUrls: string[] = marina.gallery_image_urls
+      ? JSON.parse(marina.gallery_image_urls)
+      : [];
+    const marinaImages = [
+      ...(marina.cover_image_url
+        ? [
+            {
+              url: marina.cover_image_url as string,
+              isPrimary: true,
+              title: marina.name as string,
+            },
+          ]
+        : []),
+      ...galleryUrls.map((url: string) => ({
+        url,
+        isPrimary: false,
+        title: marina.name as string,
+      })),
+    ];
 
     // Transform flat structure to nested structure expected by frontend
     const transformedMarina = {
@@ -5167,18 +5946,14 @@ const handleMarinaDetails = async (req: Request, res: Response) => {
         description: "",
       },
       isFeatured: marina.is_featured === 1,
+      isDirectoryOnly: marina.is_directory_only === 1,
       rating: {
         average: marina.avg_rating
           ? parseFloat(marina.avg_rating).toFixed(1)
           : "0.0",
         count: marina.review_count || 0,
       },
-      images: images.map((img) => ({
-        id: img.id,
-        url: img.url,
-        title: img.title || marina.name,
-        isPrimary: img.isPrimary === 1,
-      })),
+      images: marinaImages,
       amenities: marina.amenities
         ? marina.amenities.split(",").map((name: string, index: number) => ({
             id: index,
@@ -5311,6 +6086,7 @@ const handleCreatePaymentIntent = async (req: Request, res: Response) => {
       checkOut,
       couponCode,
       specialRequests,
+      isMobileApp,
     } = req.body;
 
     // Calculate booking details
@@ -5356,9 +6132,10 @@ const handleCreatePaymentIntent = async (req: Request, res: Response) => {
     // Create Stripe PaymentIntent FIRST before booking
     console.log("Creating payment intent for amount:", totalAmount);
 
+    const stripeClient = await getStripeClient(!!isMobileApp);
     let paymentIntent;
     try {
-      paymentIntent = await stripe.paymentIntents.create({
+      paymentIntent = await stripeClient.paymentIntents.create({
         amount: Math.round(totalAmount * 100),
         currency: "usd",
         metadata: {
@@ -5412,7 +6189,7 @@ const handleCreatePaymentIntent = async (req: Request, res: Response) => {
     const bookingId = bookingResult.insertId;
 
     // Update payment intent with booking ID
-    await stripe.paymentIntents.update(paymentIntent.id, {
+    await stripeClient.paymentIntents.update(paymentIntent.id, {
       metadata: {
         bookingId: bookingId.toString(),
         marinaId: marinaId.toString(),
@@ -6139,10 +6916,11 @@ const handleCreateIdentitySession = async (
 ) => {
   try {
     const userId = (req as any).authUserId;
-    const { stepId, bookingId, marinaId } = req.body;
+    const { stepId, bookingId, marinaId, isMobileApp } = req.body;
 
+    const stripeClient = await getStripeClient(!!isMobileApp);
     const verificationSession =
-      await stripe.identity.verificationSessions.create({
+      await stripeClient.identity.verificationSessions.create({
         type: "document",
         metadata: {
           user_id: userId.toString(),
@@ -6649,6 +7427,11 @@ function createServer() {
     verifyHostSession,
     handleManageHostPoints,
   );
+  expressApp.post(
+    "/api/host/marina-management/images",
+    verifyHostSession,
+    handleManageHostMarinaImages,
+  );
   expressApp.get("/api/host/guests", verifyHostSession, handleHostGuests);
   expressApp.get("/api/host/payments", verifyHostSession, handleHostPayments);
   expressApp.get(
@@ -6721,6 +7504,7 @@ function createServer() {
   );
 
   // Marina routes (public)
+  expressApp.post("/api/marina-registration", handleMarinaRegistration);
   expressApp.get("/api/marinas/search", handleMarinaSearch);
   expressApp.get("/api/marinas/filters", handleMarinaFilters);
   expressApp.get("/api/marinas/availability", handleMarinaAvailability);
@@ -6758,6 +7542,24 @@ function createServer() {
 
   // Admin routes
   expressApp.get("/api/admin/home-analytics", handleAdminHomeAnalytics);
+
+  // Environment keys routes
+  expressApp.get("/api/payments/config", handleGetPaymentsConfig);
+  expressApp.get(
+    "/api/admin/environment-keys",
+    verifyHostSession,
+    handleGetEnvironmentKeys,
+  );
+  expressApp.post(
+    "/api/admin/environment-keys",
+    verifyHostSession,
+    handleUpsertEnvironmentKey,
+  );
+  expressApp.delete(
+    "/api/admin/environment-keys/:id",
+    verifyHostSession,
+    handleDeleteEnvironmentKey,
+  );
 
   // 404 handler - only for API routes
   expressApp.use("/api", (_req: Request, res: Response, next: NextFunction) => {

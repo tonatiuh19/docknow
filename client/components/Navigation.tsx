@@ -1,16 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import {
-  Menu,
-  X,
-  Anchor,
-  Search,
-  Calendar,
-  Globe,
-  User,
-  LogOut,
-} from "lucide-react";
+import { Menu, X, Anchor, Search, Calendar, User, LogOut } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -86,8 +77,11 @@ const Navigation = () => {
             </motion.div>
           </Link>
 
-          {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center space-x-2">
+          {/* Desktop Navigation - empty center */}
+          <div className="hidden md:flex items-center justify-center space-x-2" />
+
+          {/* Right Side Actions */}
+          <div className="hidden md:flex items-center space-x-3">
             {navItems.map((item) => (
               <Link
                 key={item.href}
@@ -109,18 +103,6 @@ const Navigation = () => {
                 <span>{item.label}</span>
               </Link>
             ))}
-          </div>
-
-          {/* Right Side Actions */}
-          <div className="hidden md:flex items-center space-x-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-navy-100 hover:text-white hover:bg-white/5 rounded-xl"
-            >
-              <Globe className="w-4 h-4 mr-1" />
-              <span>EN</span>
-            </Button>
             {isAuthenticated && user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -226,13 +208,6 @@ const Navigation = () => {
                 ))}
 
                 <div className="flex flex-col space-y-2 pt-4 mt-2 border-t border-white/5">
-                  <Button
-                    variant="ghost"
-                    className="justify-start text-navy-100 hover:text-white hover:bg-white/5 rounded-xl"
-                  >
-                    <Globe className="w-4 h-4 mr-3" />
-                    Language: English
-                  </Button>
                   {isAuthenticated && user ? (
                     <>
                       <div className="px-4 py-2 border-b border-white/5">

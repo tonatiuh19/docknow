@@ -27,6 +27,7 @@ import {
   Award,
   Clock,
   Navigation,
+  Info,
 } from "lucide-react";
 
 // UI Components
@@ -93,16 +94,19 @@ const MarinaDetail: React.FC = () => {
   const authUser = useAppSelector((state) => state.auth.user);
   const isCheckingAuth = useAppSelector((state) => state.auth.isLoading);
 
-  // Mock images for showcase
-  const marinaImages = [
-    marina?.primary_image_url ||
-      "https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=1200&q=80",
+  // Fallback images for marinas without uploaded photos
+  const fallbackImages = [
+    "https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=1200&q=80",
     "https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=1200&q=80",
     "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=1200&q=80",
     "https://images.unsplash.com/photo-1566737236500-c8ac43014a8e?w=1200&q=80",
     "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=1200&q=80",
     "https://images.unsplash.com/photo-1605281317010-fe5ffe798166?w=1200&q=80",
   ];
+  const marinaImages =
+    marina?.images && marina.images.length > 0
+      ? marina.images.map((img) => img.url)
+      : fallbackImages;
 
   // Fetch marina data
   useEffect(() => {
@@ -566,65 +570,105 @@ const MarinaDetail: React.FC = () => {
               transition={{ delay: 0.3 }}
               className="sticky top-24 space-y-6"
             >
-              {/* Pricing Card */}
-              <Card className="border border-gray-200 shadow-xl rounded-2xl overflow-hidden bg-white">
-                <CardContent className="p-0">
-                  <div className="p-6">
-                    <BookingCalendar
-                      marinaId={marina.id}
-                      totalSlips={marina.total_slips || 0}
-                      availability={availability}
-                      selectedDateRange={selectedDateRange}
-                      selectedSlip={selectedSlipDetails}
-                      pricePerDay={marina.price_per_day}
-                      onDateSelect={handleDateSelect}
-                      onSlipSelect={handleSlipSelect}
-                    />
-
-                    {/* Booking Summary */}
-                    {totalCost > 0 && (
-                      <div className="mt-6 pt-6 border-t border-gray-100">
-                        <div className="space-y-4">
-                          <div className="flex justify-between text-gray-700">
-                            <span>
-                              ${selectedSlipDetails?.pricePerDay} ×{" "}
-                              {bookingDuration} nights
-                            </span>
-                            <span>${totalCost.toFixed(2)}</span>
-                          </div>
-                          <div className="flex justify-between text-gray-700">
-                            <span>Service fee</span>
-                            <span>${serviceFee.toFixed(2)}</span>
-                          </div>
-                          <Separator />
-                          <div className="flex justify-between font-bold text-lg text-gray-900">
-                            <span>Total</span>
-                            <span>${finalTotal.toFixed(2)}</span>
-                          </div>
-                        </div>
-
-                        <Button
-                          size="lg"
-                          className="w-full mt-6 bg-gradient-to-r from-ocean-600 to-ocean-700 hover:from-ocean-700 hover:to-ocean-800 text-white shadow-lg transition-all duration-300 transform hover:scale-[1.02]"
-                          disabled={
-                            !selectedDateRange.checkIn ||
-                            !selectedDateRange.checkOut ||
-                            !selectedSlip ||
-                            isCheckingAuth
-                          }
-                          onClick={handleReserveClick}
-                        >
-                          {isCheckingAuth ? "Loading..." : "Reserve"}
-                        </Button>
-
-                        <p className="text-sm text-gray-500 text-center mt-3">
-                          You won't be charged yet
-                        </p>
-                      </div>
+              {/* Directory-Only — no booking available */}
+              {marina.isDirectoryOnly ? (
+                <Card className="border border-amber-200 shadow-xl rounded-2xl overflow-hidden bg-gradient-to-br from-amber-50 to-white">
+                  <CardContent className="p-6 text-center">
+                    <div className="w-14 h-14 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-4">
+                      <Info className="h-7 w-7 text-amber-600" />
+                    </div>
+                    <h3 className="font-bold text-lg text-gray-900 mb-2">
+                      Not available on DockNow
+                    </h3>
+                    <p className="text-sm text-gray-600 mb-5">
+                      This is a directory listing. To make a reservation, please
+                      contact the marina directly.
+                    </p>
+                    {marina.contact?.phone && (
+                      <a
+                        href={`tel:${marina.contact.phone}`}
+                        className="flex items-center justify-center gap-2 w-full mb-3 px-4 py-3 rounded-xl bg-ocean-600 hover:bg-ocean-700 text-white font-semibold text-sm transition-colors duration-200"
+                      >
+                        <Phone className="h-4 w-4" />
+                        Call marina
+                      </a>
                     )}
-                  </div>
-                </CardContent>
-              </Card>
+                    {marina.contact?.website && (
+                      <a
+                        href={marina.contact.website}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl border-2 border-ocean-200 hover:border-ocean-400 text-ocean-600 hover:text-ocean-700 font-semibold text-sm transition-colors duration-200"
+                      >
+                        <Globe2 className="h-4 w-4" />
+                        Visit website
+                      </a>
+                    )}
+                  </CardContent>
+                </Card>
+              ) : (
+                <>
+                  {/* Pricing Card */}
+                  <Card className="border border-gray-200 shadow-xl rounded-2xl overflow-hidden bg-white">
+                    <CardContent className="p-0">
+                      <div className="p-6">
+                        <BookingCalendar
+                          marinaId={marina.id}
+                          totalSlips={marina.total_slips || 0}
+                          availability={availability}
+                          selectedDateRange={selectedDateRange}
+                          selectedSlip={selectedSlipDetails}
+                          pricePerDay={marina.price_per_day}
+                          onDateSelect={handleDateSelect}
+                          onSlipSelect={handleSlipSelect}
+                        />
+
+                        {/* Booking Summary */}
+                        {totalCost > 0 && (
+                          <div className="mt-6 pt-6 border-t border-gray-100">
+                            <div className="space-y-4">
+                              <div className="flex justify-between text-gray-700">
+                                <span>
+                                  ${selectedSlipDetails?.pricePerDay} ×{" "}
+                                  {bookingDuration} nights
+                                </span>
+                                <span>${totalCost.toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between text-gray-700">
+                                <span>Service fee</span>
+                                <span>${serviceFee.toFixed(2)}</span>
+                              </div>
+                              <Separator />
+                              <div className="flex justify-between font-bold text-lg text-gray-900">
+                                <span>Total</span>
+                                <span>${finalTotal.toFixed(2)}</span>
+                              </div>
+                            </div>
+
+                            <Button
+                              size="lg"
+                              className="w-full mt-6 bg-gradient-to-r from-ocean-600 to-ocean-700 hover:from-ocean-700 hover:to-ocean-800 text-white shadow-lg transition-all duration-300 transform hover:scale-[1.02]"
+                              disabled={
+                                !selectedDateRange.checkIn ||
+                                !selectedDateRange.checkOut ||
+                                !selectedSlip ||
+                                isCheckingAuth
+                              }
+                              onClick={handleReserveClick}
+                            >
+                              {isCheckingAuth ? "Loading..." : "Reserve"}
+                            </Button>
+
+                            <p className="text-sm text-gray-500 text-center mt-3">
+                              You won't be charged yet
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </>
+              )}
 
               {/* Contact Information */}
               <Card className="border-2 border-gray-100 rounded-2xl overflow-hidden bg-gradient-to-br from-white to-gray-50 shadow-lg hover:shadow-xl transition-shadow duration-300">
@@ -633,7 +677,7 @@ const MarinaDetail: React.FC = () => {
                     <div className="w-10 h-10 rounded-full bg-ocean-100 flex items-center justify-center mr-3">
                       <Phone className="h-5 w-5 text-ocean-600" />
                     </div>
-                    Contact host
+                    Contact {marina.isDirectoryOnly ? "marina" : "host"}
                   </h3>
                   <div className="space-y-4">
                     {marina.contact?.phone && (
