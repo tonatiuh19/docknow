@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost:3306
--- Generation Time: Mar 02, 2026 at 02:49 PM
+-- Generation Time: Mar 04, 2026 at 03:21 PM
 -- Server version: 5.7.23-23
 -- PHP Version: 8.1.34
 
@@ -357,8 +357,8 @@ CREATE TABLE `environment_keys` (
 --
 
 INSERT INTO `environment_keys` (`id`, `title`, `type`, `key_string`, `is_test`, `created_at`, `updated_at`) VALUES
-(1, 'stripe', 'publishable', 'pk_test_REPLACE_WITH_YOUR_STRIPE_PUBLISHABLE_KEY', 1, '2026-02-23 23:51:17', '2026-02-23 23:51:17'),
-(2, 'stripe', 'secret', 'sk_test_REPLACE_WITH_YOUR_STRIPE_SECRET_KEY', 1, '2026-02-23 23:51:17', '2026-02-23 23:51:17'),
+(1, 'stripe', 'publishable', 'pk_test_REPLACE_WITH_YOUR_STRIPE_TEST_PUBLISHABLE_KEY', 1, '2026-02-23 23:51:17', '2026-02-23 23:51:17'),
+(2, 'stripe', 'secret', 'sk_test_REPLACE_WITH_YOUR_STRIPE_TEST_SECRET_KEY', 1, '2026-02-23 23:51:17', '2026-02-23 23:51:17'),
 (3, 'stripe', 'publishable', '', 0, '2026-02-23 23:51:17', '2026-02-23 23:51:17'),
 (4, 'stripe', 'secret', '', 0, '2026-02-23 23:51:17', '2026-02-23 23:51:17');
 
@@ -938,7 +938,7 @@ INSERT INTO `marina_business_types` (`id`, `name`, `slug`, `description`, `is_ac
 (2, 'Dry Storage Marina', 'dry-storage-marina', 'Marina specializing in dry boat storage', 1),
 (3, 'Private Port', 'private-port', 'Private docking facility', 1),
 (4, 'Yacht Club', 'yacht-club', 'Private club with marina facilities', 1),
-(5, 'Harbor', 'harbor', 'Protected body of water with moorings and anchorages. Includes coves as sub-locations (e.g. Catalina Island harbors and coves with rentable moorings).', 1);
+(5, 'Harbor', 'harbor', 'Protected body of water with moorings and anchorages. Includes coves as sub-locations within or near the harbor (e.g. Catalina Island harbors and coves with rentable moorings).', 1);
 
 -- --------------------------------------------------------
 
@@ -2444,7 +2444,7 @@ ALTER TABLE `marina_amenities`
 -- AUTO_INCREMENT for table `marina_business_types`
 --
 ALTER TABLE `marina_business_types`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 
 --
 -- AUTO_INCREMENT for table `marina_features`

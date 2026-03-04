@@ -1948,13 +1948,13 @@ const handleHostBookings = async (req: AuthenticatedRequest, res: Response) => {
              COUNT(DISTINCT CASE WHEN gss.is_completed = 1 THEN gss.id END) as completed_submissions
       FROM bookings b
       INNER JOIN marinas m ON b.marina_id = m.id
-      INNER JOIN hosts h ON h.marina_id = m.id
+      INNER JOIN marina_hosts mh ON mh.marina_id = m.id AND mh.host_id = ?
       LEFT JOIN slips s ON b.slip_id = s.id
       INNER JOIN users u ON b.user_id = u.id
       LEFT JOIN boats bo ON b.boat_id = bo.id
       LEFT JOIN boat_types bt ON bo.boat_type_id = bt.id
       LEFT JOIN guest_step_submissions gss ON b.id = gss.booking_id
-      WHERE h.id = ?
+      WHERE 1=1
     `;
     const params: any[] = [hostId];
 
@@ -2004,9 +2004,9 @@ const handleHostBlockedDates = async (
              m.name as marina_name, s.slip_number
       FROM blocked_dates bd
       INNER JOIN marinas m ON bd.marina_id = m.id
-      INNER JOIN hosts h ON h.marina_id = m.id
+      INNER JOIN marina_hosts mh ON mh.marina_id = m.id AND mh.host_id = ?
       LEFT JOIN slips s ON bd.slip_id = s.id
-      WHERE h.id = ?
+      WHERE 1=1
     `;
     const params: any[] = [hostId];
 
@@ -2074,7 +2074,7 @@ const handleCreateHostBlockedDate = async (
     }
 
     const marinaAccess = await query<RowDataPacket[]>(
-      `SELECT 1 FROM hosts WHERE id = ? AND marina_id = ? LIMIT 1`,
+      `SELECT 1 FROM marina_hosts WHERE host_id = ? AND marina_id = ? LIMIT 1`,
       [hostId, marinaId],
     );
 
@@ -2199,13 +2199,13 @@ const handleHostMarinas = async (req: AuthenticatedRequest, res: Response) => {
     const hostId = (req as any).authHostId;
 
     const marinas = await query<RowDataPacket[]>(
-      `SELECT m.*, bt.name as business_type_name, h.role as host_role,
+      `SELECT m.*, bt.name as business_type_name, mh.role as host_role,
        (SELECT COUNT(*) FROM slips WHERE marina_id = m.id) as total_slips,
        (SELECT COUNT(*) FROM slips WHERE marina_id = m.id AND is_available = TRUE) as available_slips
        FROM marinas m
-       INNER JOIN hosts h ON h.marina_id = m.id
+       INNER JOIN marina_hosts mh ON mh.marina_id = m.id
        LEFT JOIN marina_business_types bt ON m.business_type_id = bt.id
-      WHERE h.id = ?
+      WHERE mh.host_id = ?
        ORDER BY m.created_at DESC`,
       [hostId],
     );
@@ -2230,8 +2230,8 @@ const handleHostSlips = async (req: AuthenticatedRequest, res: Response) => {
       SELECT s.*, m.name as marina_name
       FROM slips s
       INNER JOIN marinas m ON s.marina_id = m.id
-      INNER JOIN hosts h ON h.marina_id = m.id
-      WHERE h.id = ?
+      INNER JOIN marina_hosts mh ON mh.marina_id = m.id
+      WHERE mh.host_id = ?
     `;
     const params: any[] = [hostId];
 
@@ -2262,8 +2262,8 @@ const handleHostMarinaManagement = async (
       `SELECT m.id, m.name, m.city, m.state, m.country, m.is_active, m.updated_at,
               m.price_per_day as marina_price_per_day
        FROM marinas m
-       INNER JOIN hosts h ON h.marina_id = m.id
-      WHERE h.id = ?
+       INNER JOIN marina_hosts mh ON mh.marina_id = m.id
+      WHERE mh.host_id = ?
        ORDER BY m.name ASC`,
       [hostId],
     );
@@ -2584,7 +2584,7 @@ const handleHostMarinaManagement = async (
 
 const hasHostMarinaAccess = async (hostId: number, marinaId: number) => {
   const accessRows = await query<RowDataPacket[]>(
-    `SELECT 1 FROM hosts WHERE id = ? AND marina_id = ? LIMIT 1`,
+    `SELECT 1 FROM marina_hosts WHERE host_id = ? AND marina_id = ? LIMIT 1`,
     [hostId, marinaId],
   );
   return accessRows.length > 0;
@@ -2794,8 +2794,8 @@ const handleManageHostSlips = async (
 
     const slipRows = await query<RowDataPacket[]>(
       `SELECT s.id FROM slips s
-       INNER JOIN hosts h ON h.marina_id = s.marina_id
-      WHERE s.id = ? AND h.id = ?
+       INNER JOIN marina_hosts mh ON mh.marina_id = s.marina_id
+      WHERE s.id = ? AND mh.host_id = ?
        LIMIT 1`,
       [slipId, hostId],
     );
@@ -2913,8 +2913,8 @@ const handleManageHostAnchorages = async (
 
     const rows = await query<RowDataPacket[]>(
       `SELECT a.id FROM anchorages a
-       INNER JOIN hosts h ON h.marina_id = a.marina_id
-      WHERE a.id = ? AND h.id = ?
+       INNER JOIN marina_hosts mh ON mh.marina_id = a.marina_id
+      WHERE a.id = ? AND mh.host_id = ?
        LIMIT 1`,
       [anchorageId, hostId],
     );
@@ -3024,8 +3024,8 @@ const handleManageHostSeabeds = async (
 
     const rows = await query<RowDataPacket[]>(
       `SELECT sb.id FROM seabeds sb
-       INNER JOIN hosts h ON h.marina_id = sb.marina_id
-      WHERE sb.id = ? AND h.id = ?
+       INNER JOIN marina_hosts mh ON mh.marina_id = sb.marina_id
+      WHERE sb.id = ? AND mh.host_id = ?
        LIMIT 1`,
       [seabedId, hostId],
     );
@@ -3128,8 +3128,8 @@ const handleManageHostMoorings = async (
 
     const rows = await query<RowDataPacket[]>(
       `SELECT mo.id FROM moorings mo
-       INNER JOIN hosts h ON h.marina_id = mo.marina_id
-      WHERE mo.id = ? AND h.id = ?
+       INNER JOIN marina_hosts mh ON mh.marina_id = mo.marina_id
+      WHERE mo.id = ? AND mh.host_id = ?
        LIMIT 1`,
       [mooringId, hostId],
     );
@@ -3241,8 +3241,8 @@ const handleManageHostPoints = async (
 
     const rows = await query<RowDataPacket[]>(
       `SELECT p.id FROM points p
-       INNER JOIN hosts h ON h.marina_id = p.marina_id
-      WHERE p.id = ? AND h.id = ?
+       INNER JOIN marina_hosts mh ON mh.marina_id = p.marina_id
+      WHERE p.id = ? AND mh.host_id = ?
        LIMIT 1`,
       [pointId, hostId],
     );
@@ -3413,8 +3413,8 @@ const handleHostGuests = async (req: AuthenticatedRequest, res: Response) => {
        FROM users u
        INNER JOIN bookings b ON u.id = b.user_id
        INNER JOIN marinas m ON b.marina_id = m.id
-       INNER JOIN hosts h ON h.marina_id = m.id
-      WHERE h.id = ?
+       INNER JOIN marina_hosts mh ON mh.marina_id = m.id
+      WHERE mh.host_id = ?
        GROUP BY u.id
        ORDER BY u.full_name`,
       [hostId],
@@ -3441,9 +3441,9 @@ const handleHostPayments = async (req: AuthenticatedRequest, res: Response) => {
        u.email as guest_email
        FROM bookings b
        INNER JOIN marinas m ON b.marina_id = m.id
-       INNER JOIN hosts h ON h.marina_id = m.id
+       INNER JOIN marina_hosts mh ON mh.marina_id = m.id
        INNER JOIN users u ON b.user_id = u.id
-      WHERE h.id = ? AND b.status IN ('confirmed', 'completed')
+      WHERE mh.host_id = ? AND b.status IN ('confirmed', 'completed')
        ORDER BY b.created_at DESC
        LIMIT 50`,
       [hostId],
@@ -3492,8 +3492,8 @@ const handleHostPayments = async (req: AuthenticatedRequest, res: Response) => {
        COUNT(CASE WHEN b.status IN ('confirmed', 'completed') THEN 1 END) as total_transactions
        FROM bookings b
        INNER JOIN marinas m ON b.marina_id = m.id
-       INNER JOIN hosts h ON h.marina_id = m.id
-      WHERE h.id = ?`,
+       INNER JOIN marina_hosts mh ON mh.marina_id = m.id
+      WHERE mh.host_id = ?`,
       [hostId],
     );
 
@@ -3527,16 +3527,16 @@ const handleHostDashboardStats = async (
        SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END) as activeBookings
        FROM bookings b
        INNER JOIN marinas m ON b.marina_id = m.id
-       INNER JOIN hosts h ON h.marina_id = m.id
-      WHERE h.id = ?`,
+       INNER JOIN marina_hosts mh ON mh.marina_id = m.id
+      WHERE mh.host_id = ?`,
       [hostId],
     );
 
     // Get total marinas managed by this host
     const marinaStats = await query<RowDataPacket[]>(
-      `SELECT COUNT(DISTINCT h.marina_id) as totalMarinas 
-       FROM hosts h 
-      WHERE h.id = ?`,
+      `SELECT COUNT(DISTINCT mh.marina_id) as totalMarinas 
+       FROM marina_hosts mh 
+      WHERE mh.host_id = ?`,
       [hostId],
     );
 
@@ -3546,9 +3546,9 @@ const handleHostDashboardStats = async (
        m.name as marina_name, u.full_name as guest_name
        FROM bookings b
        INNER JOIN marinas m ON b.marina_id = m.id
-       INNER JOIN hosts h ON h.marina_id = m.id
+       INNER JOIN marina_hosts mh ON mh.marina_id = m.id
        INNER JOIN users u ON b.user_id = u.id
-      WHERE h.id = ?
+      WHERE mh.host_id = ?
        ORDER BY b.created_at DESC
        LIMIT 10`,
       [hostId],
@@ -3559,8 +3559,8 @@ const handleHostDashboardStats = async (
       `SELECT b.status, COUNT(*) as count
        FROM bookings b
        INNER JOIN marinas m ON b.marina_id = m.id
-       INNER JOIN hosts h ON h.marina_id = m.id
-      WHERE h.id = ?
+       INNER JOIN marina_hosts mh ON mh.marina_id = m.id
+      WHERE mh.host_id = ?
        GROUP BY b.status`,
       [hostId],
     );
@@ -3600,8 +3600,8 @@ const handleHostPreCheckoutSteps = async (
       (SELECT COUNT(*) FROM pre_checkout_step_fields WHERE step_id = pcs.id) as field_count
       FROM marina_pre_checkout_steps pcs
       INNER JOIN marinas m ON pcs.marina_id = m.id
-      INNER JOIN hosts h ON h.marina_id = m.id
-      WHERE h.id = ?
+      INNER JOIN marina_hosts mh ON mh.marina_id = m.id
+      WHERE mh.host_id = ?
     `;
     const params: any[] = [hostId];
 
@@ -3664,9 +3664,9 @@ const handleHostSubmissions = async (
       INNER JOIN marina_pre_checkout_steps pcs ON gss.step_id = pcs.id
       INNER JOIN bookings b ON gss.booking_id = b.id
       INNER JOIN marinas m ON b.marina_id = m.id
-      INNER JOIN hosts h ON h.marina_id = m.id
+      INNER JOIN marina_hosts mh ON mh.marina_id = m.id AND mh.host_id = ?
       INNER JOIN users u ON gss.user_id = u.id
-      WHERE h.id = ?
+      WHERE 1=1
     `;
     const params: any[] = [hostId];
 
@@ -3703,8 +3703,8 @@ const handleApproveBooking = async (
     const bookings = await query<RowDataPacket[]>(
       `SELECT b.id FROM bookings b
        INNER JOIN marinas m ON b.marina_id = m.id
-       INNER JOIN hosts h ON h.marina_id = m.id
-      WHERE b.id = ? AND h.id = ?`,
+       INNER JOIN marina_hosts mh ON mh.marina_id = m.id
+      WHERE b.id = ? AND mh.host_id = ?`,
       [bookingId, hostId],
     );
 
@@ -3752,8 +3752,8 @@ const handleHostVisitorAnalytics = async (
        COUNT(DISTINCT session_id) as unique_visitors
        FROM visitor_page_views vp
        INNER JOIN marinas m ON vp.marina_id = m.id
-       INNER JOIN hosts h ON h.marina_id = m.id
-      WHERE h.id = ? AND vp.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+       INNER JOIN marina_hosts mh ON mh.marina_id = m.id
+      WHERE mh.host_id = ? AND vp.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
        GROUP BY DATE(created_at)
        ORDER BY date DESC`,
       [hostId, parseInt(period as string)],
@@ -3791,8 +3791,8 @@ const handleGetManagedHosts = async (
       const marinas = await query<RowDataPacket[]>(
         `SELECT m.name as marina_name
          FROM marinas m
-         INNER JOIN hosts h ON h.marina_id = m.id
-         WHERE m.id = ? AND h.id = ? AND h.role IN ('primary', 'manager')`,
+         INNER JOIN marina_hosts mh ON mh.marina_id = m.id
+         WHERE m.id = ? AND mh.host_id = ? AND mh.role IN ('primary', 'manager')`,
         [marinaId, hostId],
       );
 
@@ -3807,11 +3807,12 @@ const handleGetManagedHosts = async (
 
       // Get all hosts for this marina
       assignedHosts = await query<RowDataPacket[]>(
-        `SELECT h.id, h.full_name, h.email, h.phone, h.created_at, h.role,
-         CASE WHEN h.role = 'primary' THEN true ELSE false END as is_primary
+        `SELECT h.id, h.full_name, h.email, h.phone, h.created_at, mh.role,
+         CASE WHEN mh.role = 'primary' THEN true ELSE false END as is_primary
          FROM hosts h
-         WHERE h.marina_id = ? AND h.is_active = 1
-         ORDER BY h.role = 'primary' DESC, h.full_name ASC`,
+         INNER JOIN marina_hosts mh ON mh.host_id = h.id
+         WHERE mh.marina_id = ? AND h.is_active = 1
+         ORDER BY mh.role = 'primary' DESC, h.full_name ASC`,
         [marinaId],
       );
     }
@@ -3820,10 +3821,10 @@ const handleGetManagedHosts = async (
     const assignedHostIds = assignedHosts.map((h) => h.id);
     const availableHosts = await query<RowDataPacket[]>(
       `SELECT h.id, h.full_name, h.email, h.phone, h.created_at,
-       COUNT(h2.id) as marina_count
+       (SELECT COUNT(*) FROM marina_hosts WHERE host_id = h.id) as marina_count
        FROM hosts h
-       LEFT JOIN hosts h2 ON h.id = h2.id AND h2.marina_id IS NOT NULL
-       WHERE h.is_active = 1 AND (h.marina_id IS NULL OR h.marina_id != ?)
+       WHERE h.is_active = 1
+       ${marinaId ? `AND NOT EXISTS (SELECT 1 FROM marina_hosts WHERE host_id = h.id AND marina_id = ?)` : ""}
        ${assignedHostIds.length > 0 ? `AND h.id NOT IN (${assignedHostIds.map(() => "?").join(",")})` : ""}
        GROUP BY h.id
        ORDER BY h.created_at DESC`,
@@ -3874,7 +3875,7 @@ const handleAssignHost = async (req: AuthenticatedRequest, res: Response) => {
 
     // Check if host is already assigned to this marina
     const existingAssignment = await query<RowDataPacket[]>(
-      `SELECT id FROM hosts WHERE id = ? AND marina_id = ?`,
+      `SELECT host_id FROM marina_hosts WHERE host_id = ? AND marina_id = ?`,
       [hostId, marinaId],
     );
 
@@ -3887,8 +3888,8 @@ const handleAssignHost = async (req: AuthenticatedRequest, res: Response) => {
 
     // Assign the host to the marina
     await query(
-      `UPDATE hosts SET marina_id = ?, role = 'manager' WHERE id = ?`,
-      [marinaId, hostId],
+      `INSERT INTO marina_hosts (host_id, marina_id, role) VALUES (?, ?, 'manager')`,
+      [hostId, marinaId],
     );
 
     res.json({ success: true, message: "Host assigned successfully" });
@@ -3984,7 +3985,7 @@ const handleRemoveHost = async (req: AuthenticatedRequest, res: Response) => {
 
     // Check if host is assigned to this marina
     const hostCheck = await query<RowDataPacket[]>(
-      `SELECT id, role FROM hosts WHERE id = ? AND marina_id = ?`,
+      `SELECT host_id, role FROM marina_hosts WHERE host_id = ? AND marina_id = ?`,
       [hostId, marinaId],
     );
 
@@ -4007,8 +4008,8 @@ const handleRemoveHost = async (req: AuthenticatedRequest, res: Response) => {
 
     // Remove host from marina
     await query(
-      `UPDATE hosts SET marina_id = NULL, role = 'manager' WHERE id = ?`,
-      [hostId],
+      `DELETE FROM marina_hosts WHERE host_id = ? AND marina_id = ?`,
+      [hostId, marinaId],
     );
 
     res.json({ success: true, message: "Host removed successfully" });
@@ -4097,8 +4098,8 @@ const handleAdminGetHosts = async (
       const marinas = await query<RowDataPacket[]>(
         `SELECT m.name as marina_name
          FROM marinas m
-         INNER JOIN hosts h ON h.marina_id = m.id
-         WHERE m.id = ? AND h.id = ? AND h.role IN ('primary', 'manager')`,
+         INNER JOIN marina_hosts mh ON mh.marina_id = m.id
+         WHERE m.id = ? AND mh.host_id = ? AND mh.role IN ('primary', 'manager')`,
         [marinaId, hostId],
       );
 
@@ -4113,11 +4114,12 @@ const handleAdminGetHosts = async (
 
       // Get all hosts assigned to this marina
       assignedHosts = await query<RowDataPacket[]>(
-        `SELECT h.id, h.full_name, h.email, h.phone, h.created_at, h.marina_id, h.role, h.is_active,
-         h.created_at as assigned_at
+        `SELECT h.id, h.full_name, h.email, h.phone, h.created_at, mh.marina_id, mh.role, h.is_active,
+         mh.created_at as assigned_at
          FROM hosts h
-         WHERE h.marina_id = ?
-         ORDER BY h.role = 'primary' DESC, h.full_name ASC`,
+         INNER JOIN marina_hosts mh ON mh.host_id = h.id
+         WHERE mh.marina_id = ?
+         ORDER BY mh.role = 'primary' DESC, h.full_name ASC`,
         [marinaId],
       );
     }
@@ -4126,10 +4128,10 @@ const handleAdminGetHosts = async (
     const assignedHostIds = assignedHosts.map((h) => h.id);
     const availableHosts = await query<RowDataPacket[]>(
       `SELECT h.id, h.full_name, h.email, h.phone, h.created_at,
-       CASE WHEN h.marina_id IS NOT NULL THEN 1 ELSE 0 END as marina_count
+       (SELECT COUNT(*) FROM marina_hosts WHERE host_id = h.id) as marina_count
        FROM hosts h
        WHERE h.is_active = 1
-       ${marinaId ? `AND (h.marina_id IS NULL OR h.marina_id != ?)` : ""}
+       ${marinaId ? `AND NOT EXISTS (SELECT 1 FROM marina_hosts WHERE host_id = h.id AND marina_id = ?)` : ""}
        ${assignedHostIds.length > 0 ? `AND h.id NOT IN (${assignedHostIds.map(() => "?").join(",")})` : ""}
        GROUP BY h.id, h.full_name, h.email, h.phone, h.created_at
        ORDER BY h.created_at DESC`,
@@ -4258,7 +4260,7 @@ const handleAdminAssignHost = async (
 
     // Check if host is already assigned to this marina
     const existingAssignment = await query<RowDataPacket[]>(
-      `SELECT id FROM hosts WHERE id = ? AND marina_id = ?`,
+      `SELECT host_id FROM marina_hosts WHERE host_id = ? AND marina_id = ?`,
       [hostId, marinaId],
     );
 
@@ -4270,11 +4272,10 @@ const handleAdminAssignHost = async (
     }
 
     // Assign the host to the marina
-    await query(`UPDATE hosts SET marina_id = ?, role = ? WHERE id = ?`, [
-      marinaId,
-      role,
-      hostId,
-    ]);
+    await query(
+      `INSERT INTO marina_hosts (host_id, marina_id, role) VALUES (?, ?, ?)`,
+      [hostId, marinaId, role],
+    );
 
     res.json({
       success: true,
@@ -4429,10 +4430,10 @@ const handleAdminRemoveHost = async (
       });
     }
 
-    // Remove host from marina (set marina_id to NULL)
+    // Remove host from marina (junction table)
     await query(
-      `UPDATE hosts SET marina_id = NULL, role = 'manager' WHERE id = ?`,
-      [hostId],
+      `DELETE FROM marina_hosts WHERE host_id = ? AND marina_id = ?`,
+      [hostId, marinaId],
     );
 
     res.json({ success: true, message: "Host removed successfully" });
@@ -5218,11 +5219,11 @@ const handleMarinaRegistration = async (req: Request, res: Response) => {
     let hostId: number;
     if (existingHosts.length > 0) {
       hostId = existingHosts[0].id;
-      // Link to new marina
-      await query("UPDATE hosts SET marina_id = ? WHERE id = ?", [
-        marinaId,
-        hostId,
-      ]);
+      // Link to new marina via junction table
+      await query(
+        `INSERT IGNORE INTO marina_hosts (host_id, marina_id, role) VALUES (?, ?, 'primary')`,
+        [hostId, marinaId],
+      );
     } else {
       const hostResult = await query<ResultSetHeader>(
         `INSERT INTO hosts (marina_id, role, email, full_name, phone, company_name, is_active, email_verified)
@@ -5236,6 +5237,11 @@ const handleMarinaRegistration = async (req: Request, res: Response) => {
         ],
       );
       hostId = hostResult.insertId;
+      // Also register in junction table
+      await query(
+        `INSERT IGNORE INTO marina_hosts (host_id, marina_id, role) VALUES (?, ?, 'primary')`,
+        [hostId, marinaId],
+      );
     }
 
     // 5. Link host to marina

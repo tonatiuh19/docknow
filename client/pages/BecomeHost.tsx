@@ -105,7 +105,7 @@ const BUSINESS_TYPES = [
     id: 5,
     label: "Harbor",
     description:
-      "Protected harbor with moorings and anchorages — coves are sub-locations within the harbor",
+      "Protected harbor with moorings and anchorages — coves are sub-locations within or near the harbor",
     icon: Sailboat,
     gradient: "from-teal-500 to-cyan-700",
   },
