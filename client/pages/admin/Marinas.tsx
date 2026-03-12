@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { Building2, MapPin } from "lucide-react";
+import { Building2, DollarSign, Layers, MapPin, Wrench } from "lucide-react";
 import { useFormik } from "formik";
 import * as Yup from "yup";
 import AdminLayout from "@/components/admin/AdminLayout";
@@ -30,6 +30,7 @@ import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import {
   deleteMarinaImage,
   fetchHostMarinaManagement,
+  fetchMarinaServicePricing,
   manageMarinaAnchorages,
   manageMarinaImages,
   manageMarinaMoorings,
@@ -38,9 +39,11 @@ import {
   manageMarinaSlips,
   saveMarinaAmenities,
   saveMarinaFeatures,
+  updateMarinaServicePricing,
   uploadMarinaImage,
   type MarinaManagementItem,
 } from "@/store/slices/adminMarinasSlice";
+import type { BookingServiceType, MarinaServiceTypePricing } from "@shared/api";
 
 const formatPrice = (value: number | null) => {
   if (value === null) return "N/A";
@@ -75,7 +78,183 @@ type ModalSection =
   | "anchorages"
   | "seabeds"
   | "moorings"
-  | "points";
+  | "points"
+  | "service-pricing";
+
+const SERVICE_TYPE_LABELS: Record<
+  BookingServiceType,
+  { label: string; description: string }
+> = {
+  slip: {
+    label: "Slip Docking",
+    description: "Standard berthing in a marina slip",
+  },
+  dry_stack: {
+    label: "Dry Stack Storage",
+    description: "Dry storage on racks, forklift launched",
+  },
+  shipyard_maintenance: {
+    label: "Shipyard Maintenance",
+    description: "Haul-out and maintenance services",
+  },
+};
+
+const SERVICE_TYPE_ORDER: BookingServiceType[] = [
+  "slip",
+  "dry_stack",
+  "shipyard_maintenance",
+];
+
+const ServicePricingModalContent = ({
+  marinaId,
+  saving,
+  onClose,
+  onRefresh,
+}: {
+  marinaId: number;
+  saving: boolean;
+  onClose: () => void;
+  onRefresh: () => void;
+}) => {
+  const dispatch = useAppDispatch();
+  const [pricing, setPricing] = useState<MarinaServiceTypePricing[]>([]);
+  const [loadingPricing, setLoadingPricing] = useState(true);
+  const [savingPricing, setSavingPricing] = useState(false);
+
+  useEffect(() => {
+    setLoadingPricing(true);
+    dispatch(fetchMarinaServicePricing(marinaId))
+      .unwrap()
+      .then((data) => {
+        // Ensure all 3 service types are present
+        const filled = SERVICE_TYPE_ORDER.map((st) => {
+          const existing = data.find((p) => p.service_type === st);
+          return (
+            existing || {
+              service_type: st,
+              price_per_day: 0,
+              is_available: false,
+              description: "",
+            }
+          );
+        });
+        setPricing(filled);
+      })
+      .finally(() => setLoadingPricing(false));
+  }, [dispatch, marinaId]);
+
+  const handleChange = (
+    serviceType: BookingServiceType,
+    field: keyof MarinaServiceTypePricing,
+    value: string | boolean | number,
+  ) => {
+    setPricing((prev) =>
+      prev.map((p) =>
+        p.service_type === serviceType ? { ...p, [field]: value } : p,
+      ),
+    );
+  };
+
+  const handleSave = async () => {
+    setSavingPricing(true);
+    try {
+      await dispatch(
+        updateMarinaServicePricing({ marinaId, pricing }),
+      ).unwrap();
+      onRefresh();
+      onClose();
+    } finally {
+      setSavingPricing(false);
+    }
+  };
+
+  if (loadingPricing) {
+    return (
+      <p className="text-sm text-navy-500 py-4">Loading service pricing...</p>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {SERVICE_TYPE_ORDER.map((serviceType) => {
+        const row = pricing.find((p) => p.service_type === serviceType)!;
+        const { label, description } = SERVICE_TYPE_LABELS[serviceType];
+        return (
+          <div
+            key={serviceType}
+            className="border border-slate-200 rounded-xl p-4 space-y-3"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-semibold text-navy-900 text-sm">{label}</p>
+                <p className="text-xs text-navy-500">{description}</p>
+              </div>
+              <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={row?.is_available ?? false}
+                  onChange={(e) =>
+                    handleChange(serviceType, "is_available", e.target.checked)
+                  }
+                  className="w-4 h-4 rounded"
+                />
+                <span className="text-navy-700">Available</span>
+              </label>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-navy-500 mb-1">
+                  Price per day ($)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={row?.price_per_day ?? ""}
+                  onChange={(e) =>
+                    handleChange(
+                      serviceType,
+                      "price_per_day",
+                      parseFloat(e.target.value) || 0,
+                    )
+                  }
+                  className="w-full h-9 px-3 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-navy-500 mb-1">
+                  Description (optional)
+                </label>
+                <input
+                  type="text"
+                  value={row?.description ?? ""}
+                  onChange={(e) =>
+                    handleChange(serviceType, "description", e.target.value)
+                  }
+                  className="w-full h-9 px-3 rounded-md border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500"
+                  placeholder="e.g. Includes launch service"
+                />
+              </div>
+            </div>
+          </div>
+        );
+      })}
+      <DialogFooter>
+        <Button variant="outline" type="button" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button
+          type="button"
+          onClick={handleSave}
+          disabled={savingPricing || saving}
+          className="bg-gradient-to-r from-ocean-600 to-ocean-700 hover:from-ocean-700 hover:to-ocean-800"
+        >
+          {savingPricing ? "Saving..." : "Save Pricing"}
+        </Button>
+      </DialogFooter>
+    </div>
+  );
+};
 
 const parseIds = (value: string) =>
   value
@@ -738,7 +917,10 @@ const SectionModalContent = ({
   }
 
   const sectionMap: Record<
-    Exclude<ModalSection, "marina-features" | "amenities" | "images">,
+    Exclude<
+      ModalSection,
+      "marina-features" | "amenities" | "images" | "service-pricing"
+    >,
     { formik: any; idLabel: string; idField: string }
   > = {
     slips: { formik: slipsFormik, idLabel: "Slip ID", idField: "slipId" },
@@ -1383,6 +1565,55 @@ const AdminMarinas = () => {
 
                     <div>
                       <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm font-semibold text-navy-900 flex items-center gap-1.5">
+                          <DollarSign className="w-3.5 h-3.5 text-ocean-600" />
+                          Service Type Pricing
+                        </p>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            setActiveModal({
+                              marinaId: marina.id,
+                              marinaName: marina.name,
+                              section: "service-pricing",
+                            })
+                          }
+                        >
+                          Manage
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        {SERVICE_TYPE_ORDER.map((st) => {
+                          const { label } = SERVICE_TYPE_LABELS[st];
+                          const icon =
+                            st === "slip" ? (
+                              <Layers className="w-3.5 h-3.5" />
+                            ) : (
+                              <Wrench className="w-3.5 h-3.5" />
+                            );
+                          return (
+                            <div
+                              key={st}
+                              className="rounded-lg border border-slate-200 p-3 flex items-center gap-2"
+                            >
+                              <span className="text-ocean-600">{icon}</span>
+                              <div className="min-w-0">
+                                <p className="text-xs font-medium text-navy-900 truncate">
+                                  {label}
+                                </p>
+                                <p className="text-xs text-navy-500">
+                                  Configure in CRM
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
                         <p className="text-sm font-semibold text-navy-900">
                           Points ({marina.points.length})
                         </p>
@@ -1457,15 +1688,24 @@ const AdminMarinas = () => {
             </DialogHeader>
 
             {activeModal && selectedMarina ? (
-              <SectionModalContent
-                section={activeModal.section}
-                marina={selectedMarina}
-                saving={saving}
-                onClose={() => setActiveModal(null)}
-                onRefresh={() => {
-                  dispatch(fetchHostMarinaManagement());
-                }}
-              />
+              activeModal.section === "service-pricing" ? (
+                <ServicePricingModalContent
+                  marinaId={activeModal.marinaId}
+                  saving={saving}
+                  onClose={() => setActiveModal(null)}
+                  onRefresh={() => dispatch(fetchHostMarinaManagement())}
+                />
+              ) : (
+                <SectionModalContent
+                  section={activeModal.section}
+                  marina={selectedMarina}
+                  saving={saving}
+                  onClose={() => setActiveModal(null)}
+                  onRefresh={() => {
+                    dispatch(fetchHostMarinaManagement());
+                  }}
+                />
+              )
             ) : null}
           </DialogContent>
         </Dialog>

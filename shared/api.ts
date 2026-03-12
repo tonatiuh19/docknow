@@ -54,6 +54,7 @@ export interface Marina {
   avg_rating?: number;
   review_count?: number;
   primary_image_url?: string; // cover_image_url from marinas table
+  total_images?: number | null;
 }
 
 // Marina search request parameters
@@ -242,16 +243,52 @@ export interface AuthResponse {
   sessionToken: string;
 }
 
+// Per-marina service type pricing (from marina_service_type_pricing table)
+export interface MarinaServiceTypePricing {
+  service_type: BookingServiceType;
+  price_per_day: number;
+  is_available: boolean;
+  description?: string | null;
+}
+
+// Booking service type
+export type BookingServiceType = "slip" | "dry_stack" | "shipyard_maintenance";
+
+export const BOOKING_SERVICE_TYPES: Record<
+  BookingServiceType,
+  { label: string; description: string; icon: string }
+> = {
+  slip: {
+    label: "Marina Slip",
+    description: "Standard boat slip reservation at the marina dock.",
+    icon: "Anchor",
+  },
+  dry_stack: {
+    label: "Dry Stack",
+    description:
+      "Forklift-based dry storage — your boat is stacked ashore and launched on demand.",
+    icon: "Layers",
+  },
+  shipyard_maintenance: {
+    label: "Shipyard Maintenance",
+    description:
+      "Haul-out, bottom paint, engine service, and full shipyard work.",
+    icon: "Wrench",
+  },
+};
+
 // Payment related types
 export interface PaymentIntentRequest {
   userId: number;
   marinaId: number;
   boatId: number;
-  slipId: number;
+  slipId?: number;
+  paymentMethodId?: string;
   checkIn: string;
   checkOut: string;
   couponCode?: string;
   specialRequests?: string;
+  serviceType?: BookingServiceType;
   /**
    * Set to `true` when the request originates from the mobile app.
    * When true, the server fetches the Stripe secret key from the `environment_keys`
@@ -265,6 +302,15 @@ export interface PaymentIntentResponse {
   clientSecret: string;
   bookingId: number;
   totalAmount: number;
+}
+
+export interface SavedPaymentMethod {
+  id: string;
+  brand: string;
+  last4: string;
+  expMonth: number;
+  expYear: number;
+  isDefault: boolean;
 }
 
 export interface ConfirmBookingRequest {

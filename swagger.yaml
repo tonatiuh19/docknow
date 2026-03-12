@@ -80,6 +80,26 @@ components:
           type: boolean
           example: true
 
+    MarinaServiceTypePricing:
+      type: object
+      required: [service_type, price_per_day, is_available]
+      properties:
+        service_type:
+          type: string
+          enum: [slip, dry_stack, shipyard_maintenance]
+          description: The booking service type
+        price_per_day:
+          type: number
+          format: float
+          example: 150.00
+        is_available:
+          type: boolean
+          example: true
+        description:
+          type: string
+          nullable: true
+          example: "Includes launch service"
+
     ErrorResponse:
       type: object
       properties:
@@ -235,6 +255,9 @@ components:
         insurance_policy_number:
           type: string
           nullable: true
+        photo_url:
+          type: string
+          nullable: true
 
     # ── Bookings ──────────────────────────────────────────────────────────────
     BookingBase:
@@ -284,6 +307,11 @@ components:
         specialRequests:
           type: string
           nullable: true
+        serviceType:
+          type: string
+          enum: [slip, dry_stack, shipyard_maintenance]
+          default: slip
+          description: Type of marina service being booked
         createdAt:
           type: string
           format: date-time
@@ -431,6 +459,11 @@ components:
                 type: string
               category:
                 type: string
+        serviceTypePricing:
+          type: array
+          description: Per-marina pricing for each booking service type (slip, dry_stack, shipyard_maintenance)
+          items:
+            $ref: "#/components/schemas/MarinaServiceTypePricing"
 
     # ── Slip ─────────────────────────────────────────────────────────────────
     AvailableSlip:
@@ -1087,7 +1120,7 @@ paths:
           name: status
           schema:
             type: string
-            enum: [pending, confirmed, cancelled, completed]
+            enum: [pending, confirmed, pending_approval, cancelled, completed]
           description: Filter by booking status
       responses:
         "200":
@@ -1129,6 +1162,11 @@ paths:
                 slipId:
                   type: integer
                   nullable: true
+                  description: Required when serviceType is slip; omit or null for dry_stack and shipyard_maintenance.
+                paymentMethodId:
+                  type: string
+                  nullable: true
+                  description: Optional saved Stripe payment method ID to use for this payment.
                 checkIn:
                   type: string
                   format: date
@@ -1141,6 +1179,11 @@ paths:
                 specialRequests:
                   type: string
                   nullable: true
+                serviceType:
+                  type: string
+                  enum: [slip, dry_stack, shipyard_maintenance]
+                  default: slip
+                  description: Type of marina service being booked
                 isMobileApp:
                   type: boolean
                   default: false
@@ -1156,6 +1199,65 @@ paths:
           content:
             application/json:
               schema:
+
+  /payments/methods:
+    get:
+      tags: [Payments]
+      summary: List saved payment methods for current user
+      operationId: getSavedPaymentMethods
+      security:
+        - GuestAuth: []
+      responses:
+        "200":
+          description: Saved methods returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  defaultPaymentMethodId:
+                    type: string
+                    nullable: true
+                  methods:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        brand: { type: string }
+                        last4: { type: string }
+                        expMonth: { type: integer }
+                        expYear: { type: integer }
+                        isDefault: { type: boolean }
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /payments/setup-intent:
+    post:
+      tags: [Payments]
+      summary: Create setup intent to attach a new payment method
+      operationId: createSetupIntent
+      security:
+        - GuestAuth: []
+      responses:
+        "200":
+          description: Setup intent created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  clientSecret: { type: string }
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
                 type: object
                 properties:
                   success: { type: boolean }
@@ -1929,6 +2031,7 @@ paths:
                 registration_number: { type: string, nullable: true }
                 insurance_provider: { type: string, nullable: true }
                 insurance_policy_number: { type: string, nullable: true }
+                photo_url: { type: string, nullable: true }
       responses:
         "201":
           description: Boat created
@@ -3385,6 +3488,70 @@ paths:
   # ════════════════════════════════════════════════════════
   # HOST MANAGEMENT (legacy routes kept for compatibility)
   # ════════════════════════════════════════════════════════
+  /host/marina-management/service-pricing/{marinaId}:
+    get:
+      tags: [Marina Management]
+      summary: Get service type pricing for a marina
+      operationId: getMarinaServicePricing
+      security:
+        - HostAuth: []
+      parameters:
+        - in: path
+          name: marinaId
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Service pricing rows for slip, dry_stack, shipyard_maintenance
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MarinaServiceTypePricing"
+        "403":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    put:
+      tags: [Marina Management]
+      summary: Upsert service type pricing for a marina
+      operationId: updateMarinaServicePricing
+      security:
+        - HostAuth: []
+      parameters:
+        - in: path
+          name: marinaId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pricing]
+              properties:
+                pricing:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/MarinaServiceTypePricing"
+      responses:
+        "200":
+          description: Pricing updated successfully
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SuccessBoolean" }
+        "403":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
   /host/manage-hosts:
     get:
       tags: [Host Management]

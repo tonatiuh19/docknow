@@ -1,14 +1,19 @@
+/**
+ * MarinaDetail – Airbnb / Turo-inspired redesign
+ * Flow: service type → calendar (live slip counts) → slip/price → Reserve
+ *       → BookingFlow (boat → pre-checkout → payment → confirmation)
+ */
+
 import React, { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import MetaHelmet from "@/components/MetaHelmet";
 import {
   ArrowLeft,
   Heart,
-  Share,
+  Share2,
   Star,
   MapPin,
-  Users,
   Anchor,
   Wifi,
   Car,
@@ -25,21 +30,21 @@ import {
   Check,
   Shield,
   Award,
-  Clock,
-  Navigation,
   Info,
+  Layers,
+  Wrench,
+  LayoutGrid,
+  ChevronDown,
+  ChevronUp,
+  Ruler,
+  Users,
 } from "lucide-react";
-
-// UI Components
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import BookingCalendar from "@/components/BookingCalendar";
 import SignInModal from "@/components/SignInModal";
-import BookingWizard from "@/components/BookingWizard";
+import BookingFlow from "@/components/BookingFlow";
 
-// Redux
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import {
   fetchMarinaDetail,
@@ -58,8 +63,14 @@ import {
   selectBookingDuration,
 } from "@/store/selectors/marinaDetailSelectors";
 import { checkAuthStatus } from "@/store/slices/authSlice";
+import {
+  BookingServiceType,
+  BOOKING_SERVICE_TYPES,
+  MarinaServiceTypePricing,
+} from "@shared/api";
 
-// Types
+// ─── Local types ──────────────────────────────────────────────────────────────
+
 interface AvailableSlip {
   id: number;
   slipNumber: string;
@@ -69,12 +80,61 @@ interface AvailableSlip {
   pricePerDay: number;
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const toNum = (v: unknown): number => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const toNullableNum = (v: unknown): number | null => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+const SVC_ICON: Record<BookingServiceType, React.ElementType> = {
+  slip: Anchor,
+  dry_stack: Layers,
+  shipyard_maintenance: Wrench,
+};
+
+const AMENITY_ICONS: Record<string, React.ElementType> = {
+  "Wi-Fi": Wifi,
+  WiFi: Wifi,
+  Internet: Wifi,
+  Parking: Car,
+  Electricity: Zap,
+  Power: Zap,
+  Fuel: Fuel,
+  Gas: Fuel,
+  Restrooms: Users,
+  Showers: Users,
+  Laundry: Users,
+  Security: Shield,
+  "Marina Store": Anchor,
+  Shorepower: Zap,
+  Water: Waves,
+};
+
+// ─── Fallback images ──────────────────────────────────────────────────────────
+
+const FALLBACK_IMAGES = [
+  "https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=1200&q=80",
+  "https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=1200&q=80",
+  "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=1200&q=80",
+  "https://images.unsplash.com/photo-1566737236500-c8ac43014a8e?w=1200&q=80",
+  "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=1200&q=80",
+  "https://images.unsplash.com/photo-1605281317010-fe5ffe798166?w=1200&q=80",
+];
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
 const MarinaDetail: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
 
-  // State selectors
+  // ── Redux state ──────────────────────────────────────────────────────────
   const marina = useAppSelector(selectMarinaDetail);
   const loading = useAppSelector(selectIsLoadingAnyDetail);
   const selectedDateRange = useAppSelector(selectSelectedDateRange);
@@ -82,55 +142,39 @@ const MarinaDetail: React.FC = () => {
   const availability = useAppSelector(selectMarinaAvailability);
   const availableSlips = useAppSelector(selectAvailableSlips);
   const bookingDuration = useAppSelector(selectBookingDuration);
+  const authUser = useAppSelector((s) => s.auth.user);
+  const isCheckingAuth = useAppSelector((s) => s.auth.isLoading);
 
-  // Local state
+  // ── Local state ──────────────────────────────────────────────────────────
   const [showImageGallery, setShowImageGallery] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isLiked, setIsLiked] = useState(false);
   const [showSignInModal, setShowSignInModal] = useState(false);
-  const [showBookingWizard, setShowBookingWizard] = useState(false);
+  const [showBookingFlow, setShowBookingFlow] = useState(false);
+  const [selectedServiceType, setSelectedServiceType] =
+    useState<BookingServiceType | null>(null);
+  const [showAllAmenities, setShowAllAmenities] = useState(false);
 
-  // Get auth state from Redux
-  const authUser = useAppSelector((state) => state.auth.user);
-  const isCheckingAuth = useAppSelector((state) => state.auth.isLoading);
-
-  // Fallback images for marinas without uploaded photos
-  const fallbackImages = [
-    "https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=1200&q=80",
-    "https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=1200&q=80",
-    "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=1200&q=80",
-    "https://images.unsplash.com/photo-1566737236500-c8ac43014a8e?w=1200&q=80",
-    "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=1200&q=80",
-    "https://images.unsplash.com/photo-1605281317010-fe5ffe798166?w=1200&q=80",
-  ];
-  const marinaImages =
-    marina?.images && marina.images.length > 0
-      ? marina.images.map((img) => img.url)
-      : fallbackImages;
-
-  // Fetch marina data
+  // ── Data fetching ────────────────────────────────────────────────────────
   useEffect(() => {
-    if (slug) {
-      dispatch(fetchMarinaDetail(slug));
-    }
+    if (slug) dispatch(fetchMarinaDetail(slug));
     return () => {
       dispatch(clearMarinaDetail());
     };
   }, [slug, dispatch]);
 
   useEffect(() => {
-    if (marina?.id) {
-      if (selectedDateRange.checkIn && selectedDateRange.checkOut) {
-        dispatch(
-          fetchMarinaAvailability({
-            marinaId: marina.id,
-            checkIn: selectedDateRange.checkIn.split("T")[0],
-            checkOut: selectedDateRange.checkOut.split("T")[0],
-          }),
-        );
-      } else if (!selectedDateRange.checkIn && !selectedDateRange.checkOut) {
-        dispatch(fetchMarinaAvailability({ marinaId: marina.id }));
-      }
+    if (!marina?.id) return;
+    if (selectedDateRange.checkIn && selectedDateRange.checkOut) {
+      dispatch(
+        fetchMarinaAvailability({
+          marinaId: marina.id,
+          checkIn: selectedDateRange.checkIn.split("T")[0],
+          checkOut: selectedDateRange.checkOut.split("T")[0],
+        }),
+      );
+    } else if (!selectedDateRange.checkIn && !selectedDateRange.checkOut) {
+      dispatch(fetchMarinaAvailability({ marinaId: marina.id }));
     }
   }, [
     marina?.id,
@@ -139,17 +183,15 @@ const MarinaDetail: React.FC = () => {
     dispatch,
   ]);
 
-  // Check authentication status on mount
   useEffect(() => {
     dispatch(checkAuthStatus());
   }, [dispatch]);
 
-  // Handlers
+  // ── Handlers ─────────────────────────────────────────────────────────────
   const handleDateSelect = (dates: {
     checkIn: Date | null;
     checkOut: Date | null;
   }) => {
-    // Convert Date objects to ISO strings for Redux  serialization
     dispatch(
       setSelectedDateRange({
         checkIn: dates.checkIn ? dates.checkIn.toISOString() : null,
@@ -170,708 +212,1090 @@ const MarinaDetail: React.FC = () => {
         url: window.location.href,
       });
     } else {
-      navigator.clipboard.writeText(window.location.href);
+      await navigator.clipboard.writeText(window.location.href);
     }
+  };
+
+  const canStartBookingFlow =
+    selectedServiceType !== null &&
+    selectedDateRange.checkIn !== null &&
+    selectedDateRange.checkOut !== null &&
+    (selectedServiceType !== "slip" || selectedSlip !== null);
+
+  const exitBookingFlow = () => {
+    setShowBookingFlow(false);
   };
 
   const handleReserveClick = () => {
-    if (!authUser) {
-      setShowSignInModal(true);
-    } else {
-      setShowBookingWizard(true);
+    if (!canStartBookingFlow) return;
+    if (!authUser) setShowSignInModal(true);
+    else setShowBookingFlow(true);
+  };
+
+  const handleAuthSuccess = () => {
+    // Ignore stale onSuccess emissions when modal isn't actively open.
+    if (!showSignInModal) return;
+    setShowSignInModal(false);
+    if (canStartBookingFlow) {
+      setShowBookingFlow(true);
     }
   };
 
-  const handleAuthSuccess = (authenticatedUser: any) => {
-    setShowSignInModal(false);
-    setShowBookingWizard(true);
+  useEffect(() => {
+    // Safety net: if hot-reload or state drift opens flow without required
+    // selections, force it closed so user can pick dates/slip first.
+    if (showBookingFlow && !canStartBookingFlow) {
+      setShowBookingFlow(false);
+    }
+  }, [showBookingFlow, canStartBookingFlow]);
+
+  const handleServiceTypeChange = (key: BookingServiceType) => {
+    if (selectedServiceType !== key) {
+      dispatch(setSelectedDateRange({ checkIn: null, checkOut: null }));
+      dispatch(setSelectedSlip(null));
+    }
+    setSelectedServiceType(key);
   };
 
-  // Amenities mapping
-  const amenityIcons: Record<string, any> = {
-    "Wi-Fi": Wifi,
-    WiFi: Wifi,
-    Internet: Wifi,
-    Parking: Car,
-    Electricity: Zap,
-    Power: Zap,
-    Fuel: Fuel,
-    Gas: Fuel,
-    Restrooms: Users,
-    Showers: Users,
-    Laundry: Users,
-    Security: Shield,
-    "Marina Store": Anchor,
-  };
-
-  // Loading state
-  if (loading && !marina) {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <motion.div
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          className="text-center"
-        >
-          <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-            className="w-12 h-12 border-4 border-ocean-200 border-t-ocean-600 rounded-full mx-auto mb-4"
-          />
-          <p className="text-gray-600 font-medium">Loading marina details...</p>
-        </motion.div>
-      </div>
-    );
-  }
-
-  // Error state
+  // ── Loading / not-found states ────────────────────────────────────────────
+  // Show spinner when loading OR when marina hasn't loaded yet (initial render
+  // where Redux default state has loading=false but marina=null)
   if (!marina) {
+    // If loading is active OR we just haven't gotten data yet, show spinner
+    if (loading || !slug) {
+      return (
+        <div className="min-h-screen bg-white flex items-center justify-center">
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="text-center"
+          >
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 1.8, repeat: Infinity, ease: "linear" }}
+              className="w-12 h-12 border-4 border-ocean-100 border-t-ocean-600 rounded-full mx-auto mb-4"
+            />
+            <p className="text-gray-500 text-sm font-medium">
+              Loading marina details…
+            </p>
+          </motion.div>
+        </div>
+      );
+    }
+    // Loading finished but no marina — not found
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Anchor className="w-12 h-12 text-gray-400" />
+      <div className="min-h-screen bg-white flex items-center justify-center p-6">
+        <div className="text-center max-w-sm">
+          <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-5">
+            <Anchor className="w-10 h-10 text-gray-400" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
             Marina not found
           </h1>
-          <p className="text-gray-600 mb-6">
-            The marina you're looking for doesn't exist or has been removed.
+          <p className="text-gray-500 text-sm mb-6">
+            This marina doesn't exist or has been removed.
           </p>
-          <Button
+          <button
             onClick={() => navigate("/discover")}
-            className="bg-ocean-600 hover:bg-ocean-700"
+            className="px-6 py-3 rounded-xl bg-ocean-600 hover:bg-ocean-700 text-white font-semibold text-sm transition-colors"
           >
             Browse Marinas
-          </Button>
+          </button>
         </div>
       </div>
     );
   }
 
-  // Helper function to extract amenity names
-  const getAmenityList = (): string[] => {
-    if (!marina.amenities || !Array.isArray(marina.amenities)) return [];
+  // ── Derived values ────────────────────────────────────────────────────────
+  const marinaImages =
+    marina?.images && marina.images.length > 0
+      ? marina.images.map((img: any) =>
+          typeof img === "string" ? img : img.url,
+        )
+      : FALLBACK_IMAGES;
 
-    return marina.amenities.map((amenity: any) => {
-      if (typeof amenity === "string") return amenity;
-      if (typeof amenity === "object" && amenity.name) return amenity.name;
-      return String(amenity);
-    });
-  };
+  const serviceTypePricing: MarinaServiceTypePricing[] =
+    (marina as any)?.serviceTypePricing || [];
 
-  const amenityList = getAmenityList();
+  const activePricing = serviceTypePricing.find(
+    (p) => p.service_type === selectedServiceType,
+  );
+
+  const requiresSlipSelection = selectedServiceType === "slip";
 
   const selectedSlipDetails = selectedSlip
-    ? availableSlips.find((slip) => slip.id === selectedSlip)
+    ? (availableSlips.find((s) => s.id === selectedSlip) ?? null)
     : null;
+
+  const minSlipPrice =
+    availableSlips.length > 0
+      ? Math.min(...availableSlips.map((s) => s.pricePerDay))
+      : null;
+
+  const pricePerDayForService = toNum(
+    selectedServiceType === "slip"
+      ? (selectedSlipDetails?.pricePerDay ?? marina.price_per_day ?? 0)
+      : (activePricing?.price_per_day ?? marina.price_per_day ?? 0),
+  );
+
   const totalCost =
-    selectedSlipDetails && bookingDuration
-      ? selectedSlipDetails.pricePerDay * bookingDuration
+    bookingDuration > 0 &&
+    (requiresSlipSelection ? !!selectedSlipDetails : true)
+      ? pricePerDayForService * bookingDuration
       : 0;
-  const serviceFee = totalCost * 0.1; // 10% service fee
+
+  const serviceFee = totalCost * 0.1;
   const finalTotal = totalCost + serviceFee;
 
+  const canReserve =
+    selectedServiceType !== null &&
+    bookingDuration > 0 &&
+    (requiresSlipSelection ? !!selectedSlipDetails : true);
+
+  // Base display price (before any selection)
+  const basePriceDisplay = (() => {
+    const prices = serviceTypePricing
+      .filter((p) => p.is_available)
+      .map((p) => toNum(p.price_per_day));
+    if (minSlipPrice != null) prices.push(minSlipPrice);
+    if (marina.price_per_day) prices.push(toNum(marina.price_per_day));
+    return prices.filter((p) => p > 0).length > 0
+      ? Math.min(...prices.filter((p) => p > 0))
+      : 0;
+  })();
+
+  const amenityList: string[] = (() => {
+    if (!marina.amenities || !Array.isArray(marina.amenities)) return [];
+    return marina.amenities.map((a: any) => {
+      if (typeof a === "string") return a;
+      if (typeof a === "object" && a.name) return a.name;
+      return String(a);
+    });
+  })();
+
+  const displayedAmenities = showAllAmenities
+    ? amenityList
+    : amenityList.slice(0, 10);
+
+  const locationCity =
+    marina.city || (marina as any)?.location?.city || "Unknown city";
+  const locationState = marina.state || (marina as any)?.location?.state || "";
+  const locationCountry =
+    marina.country || (marina as any)?.location?.country || "";
+  const locationSecondary = locationState || locationCountry;
+
+  const totalSlipsDisplay =
+    toNum(marina.total_slips) ||
+    toNum((marina as any)?.capacity?.totalSlips) ||
+    0;
+  const availableSlipsDisplay =
+    toNum(marina.available_slips) ||
+    toNum((marina as any)?.capacity?.availableSlips) ||
+    0;
+
+  const locationSummary = locationSecondary
+    ? `${locationCity}, ${locationSecondary}`
+    : locationCity;
+
+  // Coordinates can come either from top-level fields or nested location object.
+  const mapLatitude =
+    toNullableNum(marina.latitude) ??
+    toNullableNum((marina as any)?.location?.coordinates?.latitude);
+  const mapLongitude =
+    toNullableNum(marina.longitude) ??
+    toNullableNum((marina as any)?.location?.coordinates?.longitude);
+  const hasMapCoordinates = mapLatitude !== null && mapLongitude !== null;
+
+  const isDirectoryOnly = (marina as any).isDirectoryOnly === true;
+
+  // Guard: only show booking flow if service type is also selected
+  const showingFlow = showBookingFlow && selectedServiceType !== null;
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white pb-24 lg:pb-0">
       <MetaHelmet
-        title={`${marina.name} - ${marina.city}, ${marina.state || marina.country}`}
+        title={`${marina.name} – ${locationSummary}`}
         description={
           marina.description ||
-          `Book a slip at ${marina.name} in ${marina.city}, ${marina.state || marina.country}. ${marina.total_slips} slips available starting at $${marina.price_per_day}/night. Real-time availability and instant booking.`
+          `Book at ${marina.name} in ${locationCity}. ${totalSlipsDisplay} slips from $${toNum(marina.price_per_day).toFixed(0)}/night.`
         }
-        keywords={`${marina.name}, ${marina.city} marina, ${marina.country} marina, boat slip ${marina.city}, yacht berth ${marina.city}, marina booking ${marina.city}, dock rental ${marina.city}`}
-        image={
-          marina.images && marina.images.length > 0
-            ? typeof marina.images[0] === "string"
-              ? marina.images[0]
-              : marina.images[0].url
-            : undefined
-        }
+        keywords={`${marina.name}, ${locationCity} marina, boat slip, dock rental`}
+        image={marinaImages[0]}
         url={typeof window !== "undefined" ? window.location.href : ""}
         type="website"
       />
-      {/* Floating Back Button */}
-      <motion.div
-        initial={{ scale: 0, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ delay: 0.2 }}
-        className="fixed top-6 left-6 z-50"
-      >
-        <Button
-          onClick={() => navigate(-1)}
-          className="bg-white/90 backdrop-blur-md text-gray-700 hover:bg-white border border-gray-200/50 shadow-lg rounded-full h-12 w-12 p-0"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-      </motion.div>
 
-      {/* Image Gallery */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.1 }}
-        className="w-full bg-gradient-to-b from-gray-50 to-white"
-      >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="grid grid-cols-4 gap-3 h-[450px] sm:h-[550px] rounded-2xl overflow-hidden shadow-2xl">
-            <div
-              className="col-span-4 sm:col-span-2 bg-cover bg-center cursor-pointer relative group transition-all duration-500 hover:scale-[1.02]"
-              style={{ backgroundImage: `url(${marinaImages[0]})` }}
-              onClick={() => setShowImageGallery(true)}
+      {/* ═══════════════════════════════════════════════════════════════════
+          Sticky top navigation bar
+      ═══════════════════════════════════════════════════════════════════ */}
+      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-100">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Link to="/" aria-label="DockNow home">
+              <img
+                src="https://garbrix.com/navios/assets/images/logo.png"
+                alt="DockNow"
+                className="h-8 w-auto object-contain invert"
+              />
+            </Link>
+
+            <button
+              onClick={() => (showingFlow ? exitBookingFlow() : navigate(-1))}
+              className="flex items-center gap-2 text-sm font-semibold text-gray-700 hover:text-ocean-600 transition-colors"
             >
-              <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500" />
-              <div className="absolute bottom-4 left-4 opacity-0 group-hover:opacity-100 transition-all duration-500">
-                <div className="bg-white/90 backdrop-blur-sm px-4 py-2 rounded-full flex items-center gap-2">
-                  <Camera className="h-4 w-4 text-gray-700" />
-                  <span className="text-sm font-medium text-gray-900">
-                    View Gallery
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="hidden sm:grid grid-rows-2 gap-3">
-              {marinaImages.slice(1, 3).map((img, idx) => (
-                <div
-                  key={idx}
-                  className="bg-cover bg-center cursor-pointer relative group transition-all duration-500 hover:scale-[1.05] rounded-lg overflow-hidden"
-                  style={{ backgroundImage: `url(${img})` }}
-                  onClick={() => {
-                    setCurrentImageIndex(idx + 1);
-                    setShowImageGallery(true);
-                  }}
-                >
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-500" />
-                </div>
-              ))}
-            </div>
-
-            <div className="hidden sm:grid grid-rows-2 gap-3">
-              {marinaImages.slice(3, 5).map((img, idx) => (
-                <div
-                  key={idx}
-                  className="bg-cover bg-center cursor-pointer relative group transition-all duration-500 hover:scale-[1.05] rounded-lg overflow-hidden"
-                  style={{ backgroundImage: `url(${img})` }}
-                  onClick={() => {
-                    setCurrentImageIndex(idx + 3);
-                    setShowImageGallery(true);
-                  }}
-                >
-                  {idx === 1 && (
-                    <div className="absolute inset-0 bg-black/70 flex items-center justify-center group-hover:bg-black/60 transition-all duration-500">
-                      <div className="text-white text-center transform group-hover:scale-110 transition-transform duration-500">
-                        <Camera className="h-8 w-8 mx-auto mb-2" />
-                        <span className="text-base font-semibold">
-                          +{marinaImages.length - 5} photos
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-500" />
-                </div>
-              ))}
-            </div>
+              <ArrowLeft className="h-4 w-4" />
+              <span className="hidden sm:inline">
+                {showingFlow ? `Back to ${marina.name}` : "Back"}
+              </span>
+            </button>
           </div>
-        </div>
-      </motion.div>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 lg:gap-12">
-          {/* Left Column - Details */}
-          <div className="lg:col-span-2 space-y-0">
-            {/* Header Section */}
-            <motion.div
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.2 }}
-              className="pb-8"
-            >
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center flex-wrap gap-3">
-                  {marina.is_featured && (
-                    <Badge className="bg-gradient-to-r from-ocean-500 to-ocean-700 text-white px-4 py-1.5 text-xs font-semibold shadow-md">
-                      <Award className="h-3.5 w-3.5 mr-1.5" />
-                      Featured
-                    </Badge>
-                  )}
-                  {marina.avg_rating && (
-                    <div className="flex items-center bg-gray-50 px-3 py-1.5 rounded-full">
-                      <Star className="h-4 w-4 text-yellow-500 fill-current mr-1.5" />
-                      <span className="text-sm font-bold text-gray-900">
-                        {Number(marina.avg_rating).toFixed(1)}
-                      </span>
-                      <span className="text-sm text-gray-500 ml-1.5">
-                        ({marina.review_count})
-                      </span>
-                    </div>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleShare}
-                    className="flex items-center text-gray-700 hover:bg-gray-100 rounded-full h-11 w-11 p-0 transition-all duration-200 hover:scale-110"
-                  >
-                    <Share className="h-5 w-5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setIsLiked(!isLiked)}
-                    className={`flex items-center rounded-full h-11 w-11 p-0 transition-all duration-200 hover:scale-110 ${
-                      isLiked
-                        ? "text-red-600 hover:bg-red-50"
-                        : "text-gray-700 hover:bg-gray-100"
-                    }`}
-                  >
-                    <Heart
-                      className={`h-5 w-5 transition-all duration-200 ${isLiked ? "fill-current" : ""}`}
-                    />
-                  </Button>
-                </div>
-              </div>
-
-              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-900 leading-tight mb-5">
-                {marina.name}
-              </h1>
-
-              <div className="flex flex-wrap items-center gap-5 text-gray-600">
-                <div className="flex items-center bg-gray-50 px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors">
-                  <MapPin className="h-5 w-5 mr-2 text-ocean-600" />
-                  <span className="font-medium">
-                    {marina.city}, {marina.state || marina.country}
-                  </span>
-                </div>
-                <div className="flex items-center bg-gray-50 px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors">
-                  <Anchor className="h-5 w-5 mr-2 text-ocean-600" />
-                  <span className="font-medium">
-                    {marina.total_slips} slips
-                  </span>
-                </div>
-                <div className="flex items-center bg-gradient-to-r from-emerald-50 to-emerald-100 px-4 py-2 rounded-lg">
-                  <Navigation className="h-5 w-5 mr-2 text-emerald-600" />
-                  <span>{marina.available_slips} available</span>
-                </div>
-              </div>
-            </motion.div>
-
-            {/* Description */}
-            <motion.div
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.4 }}
-              className="pt-8 pb-6"
-            >
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">
-                About this marina
-              </h2>
-              <p className="text-base text-gray-700 leading-relaxed">
-                {marina.description}
-              </p>
-            </motion.div>
-
-            <div className="border-t border-gray-100 my-6" />
-
-            {/* What this place offers */}
-            {amenityList.length > 0 && (
-              <motion.div
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.5 }}
-                className="py-6"
+          {!showingFlow && (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={handleShare}
+                className="flex items-center gap-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-100 px-3 py-2 rounded-xl transition-colors"
               >
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">
-                  What this place offers
-                </h2>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
-                  {amenityList
-                    .slice(0, 12)
-                    .map((amenity: string, index: number) => {
-                      const IconComponent = amenityIcons[amenity] || Check;
-                      return (
-                        <div
-                          key={index}
-                          className="flex items-center space-x-3 py-3 px-4 rounded-lg hover:bg-gray-50 transition-colors duration-200"
-                        >
-                          <div className="flex-shrink-0 w-10 h-10 rounded-full bg-ocean-50 flex items-center justify-center">
-                            <IconComponent className="h-5 w-5 text-ocean-600" />
-                          </div>
-                          <span className="text-gray-800 font-medium text-sm">
-                            {amenity}
-                          </span>
-                        </div>
-                      );
-                    })}
-                </div>
-                {amenityList.length > 12 && (
-                  <Button
-                    variant="outline"
-                    className="mt-6 border-gray-300 hover:border-ocean-500 hover:text-ocean-600"
-                  >
-                    Show all {amenityList.length} amenities
-                  </Button>
-                )}
-              </motion.div>
-            )}
-
-            <div className="border-t border-gray-100 my-6" />
-
-            {/* Where you'll be */}
-            <motion.div
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.6 }}
-              className="py-6"
-            >
-              <h2 className="text-2xl font-bold text-gray-900 mb-6">
-                Where you'll be
-              </h2>
-
-              <div className="bg-gradient-to-r from-gray-50 to-white p-4 rounded-lg mb-4">
-                <p className="text-gray-900 font-semibold text-base">
-                  {marina.address}
-                </p>
-                <p className="text-gray-600 text-sm mt-1">
-                  {marina.city}, {marina.state} {marina.postal_code}
-                </p>
-              </div>
-
-              {marina.latitude && marina.longitude ? (
-                <div className="w-full h-96 rounded-2xl overflow-hidden shadow-lg border-2 border-gray-100">
-                  <iframe
-                    src={`https://www.openstreetmap.org/export/embed.html?bbox=${Number(marina.longitude) - 0.01},${Number(marina.latitude) - 0.01},${Number(marina.longitude) + 0.01},${Number(marina.latitude) + 0.01}&layer=mapnik&marker=${marina.latitude},${marina.longitude}`}
-                    width="100%"
-                    height="100%"
-                    style={{ border: 0 }}
-                    allowFullScreen={false}
-                    loading="lazy"
-                    title="Marina Location"
-                  />
-                </div>
-              ) : (
-                <div className="w-full h-96 rounded-2xl overflow-hidden shadow-lg border-2 border-gray-100 bg-gray-100 flex items-center justify-center">
-                  <div className="text-center text-gray-500">
-                    <MapPin className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm">Location map unavailable</p>
-                  </div>
-                </div>
-              )}
-            </motion.div>
-          </div>
-
-          {/* Right Column - Booking */}
-          <div className="lg:col-span-1">
-            <motion.div
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.3 }}
-              className="sticky top-24 space-y-6"
-            >
-              {/* Directory-Only — no booking available */}
-              {marina.isDirectoryOnly ? (
-                <Card className="border border-amber-200 shadow-xl rounded-2xl overflow-hidden bg-gradient-to-br from-amber-50 to-white">
-                  <CardContent className="p-6 text-center">
-                    <div className="w-14 h-14 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-4">
-                      <Info className="h-7 w-7 text-amber-600" />
-                    </div>
-                    <h3 className="font-bold text-lg text-gray-900 mb-2">
-                      Not available on DockNow
-                    </h3>
-                    <p className="text-sm text-gray-600 mb-5">
-                      This is a directory listing. To make a reservation, please
-                      contact the marina directly.
-                    </p>
-                    {marina.contact?.phone && (
-                      <a
-                        href={`tel:${marina.contact.phone}`}
-                        className="flex items-center justify-center gap-2 w-full mb-3 px-4 py-3 rounded-xl bg-ocean-600 hover:bg-ocean-700 text-white font-semibold text-sm transition-colors duration-200"
-                      >
-                        <Phone className="h-4 w-4" />
-                        Call marina
-                      </a>
-                    )}
-                    {marina.contact?.website && (
-                      <a
-                        href={marina.contact.website}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl border-2 border-ocean-200 hover:border-ocean-400 text-ocean-600 hover:text-ocean-700 font-semibold text-sm transition-colors duration-200"
-                      >
-                        <Globe2 className="h-4 w-4" />
-                        Visit website
-                      </a>
-                    )}
-                  </CardContent>
-                </Card>
-              ) : (
-                <>
-                  {/* Pricing Card */}
-                  <Card className="border border-gray-200 shadow-xl rounded-2xl overflow-hidden bg-white">
-                    <CardContent className="p-0">
-                      <div className="p-6">
-                        <BookingCalendar
-                          marinaId={marina.id}
-                          totalSlips={marina.total_slips || 0}
-                          availability={availability}
-                          selectedDateRange={selectedDateRange}
-                          selectedSlip={selectedSlipDetails}
-                          pricePerDay={marina.price_per_day}
-                          onDateSelect={handleDateSelect}
-                          onSlipSelect={handleSlipSelect}
-                        />
-
-                        {/* Booking Summary */}
-                        {totalCost > 0 && (
-                          <div className="mt-6 pt-6 border-t border-gray-100">
-                            <div className="space-y-4">
-                              <div className="flex justify-between text-gray-700">
-                                <span>
-                                  ${selectedSlipDetails?.pricePerDay} ×{" "}
-                                  {bookingDuration} nights
-                                </span>
-                                <span>${totalCost.toFixed(2)}</span>
-                              </div>
-                              <div className="flex justify-between text-gray-700">
-                                <span>Service fee</span>
-                                <span>${serviceFee.toFixed(2)}</span>
-                              </div>
-                              <Separator />
-                              <div className="flex justify-between font-bold text-lg text-gray-900">
-                                <span>Total</span>
-                                <span>${finalTotal.toFixed(2)}</span>
-                              </div>
-                            </div>
-
-                            <Button
-                              size="lg"
-                              className="w-full mt-6 bg-gradient-to-r from-ocean-600 to-ocean-700 hover:from-ocean-700 hover:to-ocean-800 text-white shadow-lg transition-all duration-300 transform hover:scale-[1.02]"
-                              disabled={
-                                !selectedDateRange.checkIn ||
-                                !selectedDateRange.checkOut ||
-                                !selectedSlip ||
-                                isCheckingAuth
-                              }
-                              onClick={handleReserveClick}
-                            >
-                              {isCheckingAuth ? "Loading..." : "Reserve"}
-                            </Button>
-
-                            <p className="text-sm text-gray-500 text-center mt-3">
-                              You won't be charged yet
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </>
-              )}
-
-              {/* Contact Information */}
-              <Card className="border-2 border-gray-100 rounded-2xl overflow-hidden bg-gradient-to-br from-white to-gray-50 shadow-lg hover:shadow-xl transition-shadow duration-300">
-                <CardContent className="p-6">
-                  <h3 className="font-bold text-xl text-gray-900 mb-5 flex items-center">
-                    <div className="w-10 h-10 rounded-full bg-ocean-100 flex items-center justify-center mr-3">
-                      <Phone className="h-5 w-5 text-ocean-600" />
-                    </div>
-                    Contact {marina.isDirectoryOnly ? "marina" : "host"}
-                  </h3>
-                  <div className="space-y-4">
-                    {marina.contact?.phone && (
-                      <div className="flex items-center p-3 rounded-lg hover:bg-white transition-colors group">
-                        <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center mr-3 group-hover:bg-ocean-100 transition-colors">
-                          <Phone className="h-4 w-4 text-gray-500 group-hover:text-ocean-600 transition-colors" />
-                        </div>
-                        <a
-                          href={`tel:${marina.contact.phone}`}
-                          className="text-ocean-600 hover:text-ocean-700 font-semibold flex-1"
-                        >
-                          {marina.contact.phone}
-                        </a>
-                      </div>
-                    )}
-                    {marina.contact?.email && (
-                      <div className="flex items-center p-3 rounded-lg hover:bg-white transition-colors group">
-                        <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center mr-3 group-hover:bg-ocean-100 transition-colors">
-                          <Mail className="h-4 w-4 text-gray-500 group-hover:text-ocean-600 transition-colors" />
-                        </div>
-                        <a
-                          href={`mailto:${marina.contact.email}`}
-                          className="text-ocean-600 hover:text-ocean-700 font-semibold flex-1 truncate"
-                        >
-                          {marina.contact.email}
-                        </a>
-                      </div>
-                    )}
-                    {marina.contact?.website && (
-                      <div className="flex items-center p-3 rounded-lg hover:bg-white transition-colors group">
-                        <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center mr-3 group-hover:bg-ocean-100 transition-colors">
-                          <Globe2 className="h-4 w-4 text-gray-500 group-hover:text-ocean-600 transition-colors" />
-                        </div>
-                        <a
-                          href={marina.contact.website}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-ocean-600 hover:text-ocean-700 font-semibold flex-1 truncate"
-                        >
-                          Visit website
-                        </a>
-                      </div>
-                    )}
-                  </div>
-                  <Button className="w-full mt-5 bg-gradient-to-r from-ocean-600 to-ocean-700 hover:from-ocean-700 hover:to-ocean-800 text-white shadow-md hover:shadow-lg transition-all duration-300">
-                    <Mail className="h-4 w-4 mr-2" />
-                    Message host
-                  </Button>
-                </CardContent>
-              </Card>
-            </motion.div>
-          </div>
+                <Share2 className="h-4 w-4" />
+                <span className="hidden sm:inline underline hover:no-underline">
+                  Share
+                </span>
+              </button>
+              <button
+                onClick={() => setIsLiked((l) => !l)}
+                className="flex items-center gap-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-100 px-3 py-2 rounded-xl transition-colors"
+              >
+                <Heart
+                  className={`h-4 w-4 transition-colors ${isLiked ? "fill-red-500 text-red-500" : ""}`}
+                />
+                <span className="hidden sm:inline underline hover:no-underline">
+                  Save
+                </span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Image Gallery Modal */}
+      {/* ═══════════════════════════════════════════════════════════════════
+          Inline Booking Flow (full-page takeover)
+      ═══════════════════════════════════════════════════════════════════ */}
+      <AnimatePresence mode="wait">
+        {showingFlow && selectedServiceType && (
+          <motion.div
+            key="booking-flow"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            transition={{ duration: 0.22 }}
+          >
+            <BookingFlow
+              marina={marina}
+              slip={
+                requiresSlipSelection && selectedSlipDetails
+                  ? selectedSlipDetails
+                  : {
+                      id: 0,
+                      slipNumber: "N/A",
+                      length: 0,
+                      width: 0,
+                      depth: 0,
+                      pricePerDay: pricePerDayForService,
+                    }
+              }
+              dateRange={selectedDateRange}
+              serviceType={selectedServiceType}
+              totalCost={finalTotal}
+              serviceFee={serviceFee}
+              user={authUser}
+              onBack={() => {
+                exitBookingFlow();
+                dispatch(setSelectedSlip(null));
+              }}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          Main page content (hidden when booking flow active)
+      ═══════════════════════════════════════════════════════════════════ */}
+      {!showingFlow && (
+        <>
+          {/* ─── Hero Photo Grid ──────────────────────────────────────── */}
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-5 pb-3">
+            <div className="grid grid-cols-4 grid-rows-2 gap-2 h-[400px] sm:h-[480px] rounded-2xl overflow-hidden shadow-xl">
+              {/* Large main image */}
+              <div
+                className="col-span-4 sm:col-span-2 row-span-2 relative cursor-pointer group overflow-hidden"
+                onClick={() => {
+                  setCurrentImageIndex(0);
+                  setShowImageGallery(true);
+                }}
+              >
+                <img
+                  src={marinaImages[0]}
+                  alt={marina.name}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                />
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-500" />
+              </div>
+
+              {/* 4 smaller images */}
+              {[1, 2, 3, 4].map((idx) => (
+                <div
+                  key={idx}
+                  className="hidden sm:block relative cursor-pointer group overflow-hidden"
+                  onClick={() => {
+                    setCurrentImageIndex(idx);
+                    setShowImageGallery(true);
+                  }}
+                >
+                  {marinaImages[idx] ? (
+                    <>
+                      <img
+                        src={marinaImages[idx]}
+                        alt=""
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                      />
+                      {idx === 4 && marinaImages.length > 5 && (
+                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center group-hover:bg-black/40 transition-colors">
+                          <div className="text-white text-center">
+                            <Camera className="h-5 w-5 mx-auto mb-1" />
+                            <span className="text-xs font-semibold">
+                              +{marinaImages.length - 5} more
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="w-full h-full bg-gray-100" />
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={() => setShowImageGallery(true)}
+              className="mt-3 flex items-center gap-2 text-xs font-semibold text-gray-700 border border-gray-300 rounded-lg px-4 py-2 hover:bg-gray-50 transition-colors"
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+              Show all photos
+            </button>
+          </div>
+
+          {/* ─── Main 2-column content ────────────────────────────────── */}
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 lg:gap-16">
+              {/* ══════════════ LEFT column ══════════════ */}
+              <div className="lg:col-span-2 space-y-10">
+                {/* Title block */}
+                <motion.div
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.05 }}
+                >
+                  <div className="flex items-center gap-2 mb-3 flex-wrap">
+                    {marina.is_featured && (
+                      <Badge className="bg-gradient-to-r from-ocean-500 to-ocean-700 text-white text-xs px-3 py-1">
+                        <Award className="h-3 w-3 mr-1" /> Featured
+                      </Badge>
+                    )}
+                    {(marina as any).business_type_name && (
+                      <Badge
+                        variant="outline"
+                        className="text-xs border-gray-300"
+                      >
+                        {(marina as any).business_type_name}
+                      </Badge>
+                    )}
+                  </div>
+
+                  <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 leading-tight mb-4">
+                    {marina.name}
+                  </h1>
+
+                  <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600">
+                    {marina.avg_rating && (
+                      <span className="flex items-center gap-1 font-semibold">
+                        <Star className="h-4 w-4 text-yellow-500 fill-current" />
+                        {Number(marina.avg_rating).toFixed(1)}
+                        <span className="font-normal text-gray-400 ml-0.5">
+                          ({marina.review_count} reviews)
+                        </span>
+                      </span>
+                    )}
+                    {marina.avg_rating && (
+                      <span className="text-gray-300">·</span>
+                    )}
+                    <span className="flex items-center gap-1">
+                      <MapPin className="h-3.5 w-3.5 text-ocean-600" />
+                      {locationSummary}
+                      {hasMapCoordinates && (
+                        <span className="text-gray-400">
+                          ({mapLatitude!.toFixed(4)}, {mapLongitude!.toFixed(4)}
+                          )
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-gray-300">·</span>
+                    <span className="flex items-center gap-1">
+                      <Anchor className="h-3.5 w-3.5 text-ocean-600" />
+                      {totalSlipsDisplay} slips
+                    </span>
+                    {availableSlipsDisplay >= 0 && (
+                      <>
+                        <span className="text-gray-300">·</span>
+                        <span className="text-emerald-600 font-medium">
+                          {availableSlipsDisplay} available
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </motion.div>
+
+                <Separator />
+
+                {/* Description */}
+                <motion.div
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.15 }}
+                >
+                  <h2 className="text-xl font-bold text-gray-900 mb-4">
+                    About this marina
+                  </h2>
+                  <p className="text-gray-600 leading-relaxed">
+                    {marina.description}
+                  </p>
+                </motion.div>
+
+                {/* Services available */}
+                {serviceTypePricing.filter((p) => p.is_available).length >
+                  0 && (
+                  <>
+                    <Separator />
+                    <motion.div
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.2 }}
+                    >
+                      <h2 className="text-xl font-bold text-gray-900 mb-5">
+                        Available services
+                      </h2>
+                      <div className="grid sm:grid-cols-2 gap-4">
+                        {serviceTypePricing
+                          .filter((p) => p.is_available)
+                          .map((pricing) => {
+                            const svcKey =
+                              pricing.service_type as BookingServiceType;
+                            const svcInfo = BOOKING_SERVICE_TYPES[svcKey];
+                            const Icon = SVC_ICON[svcKey];
+                            const price = toNum(pricing.price_per_day);
+                            return (
+                              <div
+                                key={svcKey}
+                                className="flex items-start gap-4 p-4 rounded-2xl border border-gray-100 bg-gradient-to-br from-gray-50 to-white hover:border-ocean-200 hover:bg-ocean-50/30 transition-colors"
+                              >
+                                <div className="w-11 h-11 rounded-xl bg-ocean-100 flex items-center justify-center shrink-0">
+                                  <Icon className="h-5 w-5 text-ocean-600" />
+                                </div>
+                                <div>
+                                  <p className="font-semibold text-gray-900">
+                                    {svcInfo?.label}
+                                  </p>
+                                  <p className="text-sm text-gray-500 mt-0.5">
+                                    {svcInfo?.description}
+                                  </p>
+                                  {price > 0 && (
+                                    <p className="text-sm font-bold text-ocean-600 mt-1.5">
+                                      ${price.toFixed(0)} / night
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </motion.div>
+                  </>
+                )}
+
+                {/* Amenities */}
+                {amenityList.length > 0 && (
+                  <>
+                    <Separator />
+                    <motion.div
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.25 }}
+                    >
+                      <h2 className="text-xl font-bold text-gray-900 mb-6">
+                        What this place offers
+                      </h2>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {displayedAmenities.map(
+                          (amenity: string, i: number) => {
+                            const Icon = AMENITY_ICONS[amenity] || Check;
+                            return (
+                              <div
+                                key={i}
+                                className="flex items-center gap-3 py-2"
+                              >
+                                <Icon className="h-5 w-5 text-gray-600 shrink-0" />
+                                <span className="text-sm text-gray-700">
+                                  {amenity}
+                                </span>
+                              </div>
+                            );
+                          },
+                        )}
+                      </div>
+                      {amenityList.length > 10 && (
+                        <button
+                          onClick={() => setShowAllAmenities((s) => !s)}
+                          className="mt-5 flex items-center gap-2 text-sm font-semibold border-2 border-gray-800 rounded-xl px-5 py-2.5 hover:bg-gray-100 transition-colors"
+                        >
+                          {showAllAmenities ? (
+                            <>
+                              <ChevronUp className="h-4 w-4" /> Show less
+                            </>
+                          ) : (
+                            <>
+                              <ChevronDown className="h-4 w-4" /> Show all{" "}
+                              {amenityList.length} amenities
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </motion.div>
+                  </>
+                )}
+
+                {/* Marina specs */}
+                {(marina.max_boat_length_meters ||
+                  marina.max_boat_draft_meters) && (
+                  <>
+                    <Separator />
+                    <motion.div
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.3 }}
+                    >
+                      <h2 className="text-xl font-bold text-gray-900 mb-5">
+                        Vessel requirements
+                      </h2>
+                      <div className="grid sm:grid-cols-2 gap-4">
+                        {marina.max_boat_length_meters && (
+                          <div className="flex items-center gap-4 p-4 rounded-xl bg-gray-50 border border-gray-100">
+                            <Ruler className="h-6 w-6 text-ocean-600 shrink-0" />
+                            <div>
+                              <p className="text-xs text-gray-500 uppercase tracking-wider font-medium">
+                                Max length
+                              </p>
+                              <p className="font-bold text-gray-900 text-lg">
+                                {marina.max_boat_length_meters}m
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                        {marina.max_boat_draft_meters && (
+                          <div className="flex items-center gap-4 p-4 rounded-xl bg-gray-50 border border-gray-100">
+                            <Waves className="h-6 w-6 text-ocean-600 shrink-0" />
+                            <div>
+                              <p className="text-xs text-gray-500 uppercase tracking-wider font-medium">
+                                Max draft
+                              </p>
+                              <p className="font-bold text-gray-900 text-lg">
+                                {marina.max_boat_draft_meters}m
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  </>
+                )}
+
+                {/* Map */}
+                <Separator />
+                <motion.div
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.35 }}
+                >
+                  <h2 className="text-xl font-bold text-gray-900 mb-2">
+                    Where you'll be
+                  </h2>
+                  {marina.address && (
+                    <p className="text-gray-800 font-medium text-sm mb-0.5">
+                      {marina.address}
+                    </p>
+                  )}
+                  <p className="text-gray-500 text-sm mb-5">
+                    {locationCity}
+                    {locationState ? `, ${locationState}` : ""}{" "}
+                    {marina.postal_code ||
+                      (marina as any)?.location?.postalCode ||
+                      ""}
+                  </p>
+
+                  {hasMapCoordinates ? (
+                    <div className="h-72 rounded-2xl overflow-hidden shadow-md border border-gray-100">
+                      <iframe
+                        src={`https://www.openstreetmap.org/export/embed.html?bbox=${mapLongitude - 0.01},${mapLatitude - 0.01},${mapLongitude + 0.01},${mapLatitude + 0.01}&layer=mapnik&marker=${mapLatitude},${mapLongitude}`}
+                        width="100%"
+                        height="100%"
+                        style={{ border: 0 }}
+                        loading="lazy"
+                        title="Marina location"
+                      />
+                    </div>
+                  ) : (
+                    <div className="h-72 rounded-2xl bg-gray-100 flex items-center justify-center border border-gray-200">
+                      <div className="text-center text-gray-400">
+                        <MapPin className="h-8 w-8 mx-auto mb-2" />
+                        <p className="text-sm">Map unavailable</p>
+                      </div>
+                    </div>
+                  )}
+                </motion.div>
+              </div>
+
+              {/* ══════════════ RIGHT column – Booking widget ══════════════ */}
+              <div className="lg:col-span-1">
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 }}
+                  className="sticky top-20 space-y-4"
+                >
+                  {isDirectoryOnly ? (
+                    /* ── Directory-only card ── */
+                    <div className="border-2 border-amber-200 rounded-2xl p-6 bg-gradient-to-br from-amber-50 to-orange-50 space-y-4">
+                      <div className="flex gap-3">
+                        <Info className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                        <div>
+                          <h3 className="font-bold text-gray-900">
+                            Not bookable on DockNow
+                          </h3>
+                          <p className="text-sm text-gray-600 mt-1">
+                            This is a directory listing. Contact the marina
+                            directly to reserve.
+                          </p>
+                        </div>
+                      </div>
+                      {(marina as any).contact?.phone && (
+                        <a
+                          href={`tel:${(marina as any).contact.phone}`}
+                          className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-ocean-600 hover:bg-ocean-700 text-white font-semibold text-sm transition-colors"
+                        >
+                          <Phone className="h-4 w-4" /> Call marina
+                        </a>
+                      )}
+                      {(marina as any).contact?.website && (
+                        <a
+                          href={(marina as any).contact.website}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-center gap-2 w-full py-3 rounded-xl border-2 border-ocean-200 text-ocean-600 hover:border-ocean-400 font-semibold text-sm transition-colors"
+                        >
+                          <Globe2 className="h-4 w-4" /> Visit website
+                        </a>
+                      )}
+                    </div>
+                  ) : (
+                    /* ── Main booking card ──
+                         NOTE: No overflow-hidden — needed so the calendar
+                         renders without clipping date tooltips/animations.
+                    ── */
+                    <div className="border border-gray-200 rounded-2xl shadow-xl bg-white">
+                      {/* Price header */}
+                      <div className="px-6 pt-6 pb-5">
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-2xl font-bold text-gray-900">
+                            {selectedServiceType && pricePerDayForService > 0
+                              ? `$${pricePerDayForService.toFixed(0)}`
+                              : `from $${basePriceDisplay.toFixed(0)}`}
+                          </span>
+                          <span className="text-gray-500 text-sm">/ night</span>
+                        </div>
+                        {marina.avg_rating && (
+                          <div className="flex items-center gap-1 mt-1.5">
+                            <Star className="h-3.5 w-3.5 text-yellow-400 fill-current" />
+                            <span className="text-sm font-bold text-gray-800">
+                              {Number(marina.avg_rating).toFixed(1)}
+                            </span>
+                            <span className="text-sm text-gray-400">
+                              · {marina.review_count} reviews
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      <Separator />
+
+                      {/* Service type selector */}
+                      <div className="px-5 py-5">
+                        <p className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-3">
+                          Service type
+                        </p>
+                        <div className="space-y-2">
+                          {(
+                            Object.entries(BOOKING_SERVICE_TYPES) as [
+                              BookingServiceType,
+                              {
+                                label: string;
+                                description: string;
+                                icon: string;
+                              },
+                            ][]
+                          ).map(([key, info]) => {
+                            const pricing = serviceTypePricing.find(
+                              (p) => p.service_type === key,
+                            );
+                            if (
+                              serviceTypePricing.length > 0 &&
+                              pricing &&
+                              !pricing.is_available
+                            )
+                              return null;
+                            if (
+                              serviceTypePricing.length > 0 &&
+                              !pricing &&
+                              key !== "slip"
+                            )
+                              return null;
+
+                            const Icon = SVC_ICON[key];
+                            const displayPrice =
+                              key === "slip"
+                                ? (minSlipPrice ??
+                                  pricing?.price_per_day ??
+                                  marina.price_per_day)
+                                : (pricing?.price_per_day ??
+                                  marina.price_per_day);
+                            const priceLabel =
+                              key === "slip" && minSlipPrice !== null
+                                ? `from $${toNum(displayPrice).toFixed(0)} /night`
+                                : `$${toNum(displayPrice).toFixed(0)} /night`;
+                            const isSelected = selectedServiceType === key;
+
+                            return (
+                              <button
+                                key={key}
+                                type="button"
+                                onClick={() => handleServiceTypeChange(key)}
+                                className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-all duration-150 flex items-center gap-3 ${
+                                  isSelected
+                                    ? "border-gray-900 bg-gray-50"
+                                    : "border-gray-200 hover:border-gray-400 hover:bg-gray-50/50"
+                                }`}
+                              >
+                                <div
+                                  className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+                                    isSelected
+                                      ? "bg-gray-900 text-white"
+                                      : "bg-gray-100 text-gray-500"
+                                  }`}
+                                >
+                                  <Icon className="h-4 w-4" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-sm font-semibold text-gray-900">
+                                      {info.label}
+                                    </span>
+                                    <span className="text-xs font-bold text-gray-600 shrink-0">
+                                      {priceLabel}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-gray-400 truncate">
+                                    {info.description}
+                                  </p>
+                                </div>
+                                {isSelected && (
+                                  <div className="w-5 h-5 rounded-full bg-gray-900 flex items-center justify-center shrink-0">
+                                    <Check className="h-3 w-3 text-white" />
+                                  </div>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Calendar — inline, outside any overflow:hidden ancestor */}
+                      {selectedServiceType && (
+                        <motion.div
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          transition={{ duration: 0.15 }}
+                        >
+                          <Separator />
+                          <div className="px-3 py-3">
+                            <p className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-3 px-2">
+                              {selectedServiceType === "slip"
+                                ? "Select dates & slip"
+                                : "Select your dates"}
+                            </p>
+                            <BookingCalendar
+                              marinaId={marina.id}
+                              totalSlips={marina.total_slips || 0}
+                              availability={availability}
+                              selectedDateRange={selectedDateRange}
+                              selectedSlip={selectedSlipDetails}
+                              pricePerDay={pricePerDayForService}
+                              onDateSelect={handleDateSelect}
+                              onSlipSelect={handleSlipSelect}
+                              showSlipSelection={selectedServiceType === "slip"}
+                            />
+                          </div>
+                        </motion.div>
+                      )}
+
+                      {/* Price breakdown + Reserve CTA */}
+                      <AnimatePresence>
+                        {canReserve && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: 10 }}
+                            transition={{ duration: 0.2 }}
+                          >
+                            <Separator />
+                            <div className="px-6 py-5 space-y-4">
+                              <div className="space-y-3 text-sm">
+                                <div className="flex justify-between text-gray-600">
+                                  <span>
+                                    ${pricePerDayForService.toFixed(2)} ×{" "}
+                                    {bookingDuration}{" "}
+                                    {bookingDuration === 1 ? "night" : "nights"}
+                                  </span>
+                                  <span>
+                                    $
+                                    {(
+                                      pricePerDayForService * bookingDuration
+                                    ).toFixed(2)}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between text-gray-600">
+                                  <span className="flex items-center gap-1">
+                                    Service fee
+                                    <Info className="h-3.5 w-3.5 text-gray-400" />
+                                  </span>
+                                  <span>${serviceFee.toFixed(2)}</span>
+                                </div>
+                                <Separator />
+                                <div className="flex justify-between font-bold text-base text-gray-900">
+                                  <span>Total</span>
+                                  <span>${finalTotal.toFixed(2)}</span>
+                                </div>
+                              </div>
+
+                              <button
+                                onClick={handleReserveClick}
+                                disabled={isCheckingAuth}
+                                className="w-full py-4 rounded-xl bg-gradient-to-r from-ocean-600 to-ocean-700 hover:from-ocean-700 hover:to-ocean-800 text-white font-bold text-base transition-all duration-200 hover:shadow-lg hover:shadow-ocean-600/25 disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.99]"
+                              >
+                                {isCheckingAuth ? "Loading…" : "Reserve"}
+                              </button>
+
+                              <p className="text-xs text-center text-gray-500">
+                                You won't be charged yet
+                              </p>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+
+                      {/* Helper prompts */}
+                      {!canReserve && selectedServiceType && (
+                        <div className="px-6 pb-5">
+                          {!bookingDuration && (
+                            <p className="text-xs text-center text-gray-500 py-2">
+                              Select your dates above to see pricing
+                            </p>
+                          )}
+                          {bookingDuration > 0 &&
+                            requiresSlipSelection &&
+                            !selectedSlipDetails && (
+                              <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 rounded-xl px-4 py-3 border border-amber-200">
+                                <Info className="h-4 w-4 shrink-0" />
+                                Choose an available slip above to continue
+                              </div>
+                            )}
+                        </div>
+                      )}
+
+                      {!selectedServiceType && (
+                        <div className="px-6 pb-5">
+                          <p className="text-xs text-center text-gray-400 py-1">
+                            Select a service type above to get started
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Trust badges */}
+                  <div className="space-y-2 px-1">
+                    {(
+                      [
+                        [Shield, "Payments secured by DockNow Protection"],
+                        [Check, "Free cancellation within 48 hours"],
+                        [Award, "DockNow verified marina"],
+                      ] as [React.ElementType, string][]
+                    ).map(([Icon, text]) => (
+                      <div
+                        key={text}
+                        className="flex items-center gap-2 text-xs text-gray-500"
+                      >
+                        <Icon className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                        {text}
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              </div>
+            </div>
+          </div>
+
+          {/* ─── Mobile sticky bottom bar ─────────────────────────────── */}
+          <div className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white border-t border-gray-200 px-4 py-3 flex items-center justify-between gap-4 safe-area-inset-bottom">
+            <div>
+              {canReserve ? (
+                <>
+                  <p className="text-base font-bold text-gray-900">
+                    ${finalTotal.toFixed(2)}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {bookingDuration}{" "}
+                    {bookingDuration === 1 ? "night" : "nights"}
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm font-semibold text-gray-700">
+                  From ${basePriceDisplay.toFixed(0)} / night
+                </p>
+              )}
+            </div>
+            <button
+              onClick={canReserve ? handleReserveClick : undefined}
+              disabled={!selectedServiceType || isCheckingAuth}
+              className={`px-8 py-3 rounded-xl font-bold text-sm transition-all ${
+                canReserve
+                  ? "bg-gradient-to-r from-ocean-600 to-ocean-700 text-white hover:from-ocean-700 hover:to-ocean-800 shadow-md shadow-ocean-600/20"
+                  : selectedServiceType
+                    ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                    : "bg-gradient-to-r from-ocean-600 to-ocean-700 text-white hover:from-ocean-700 hover:to-ocean-800"
+              }`}
+            >
+              {canReserve
+                ? "Reserve"
+                : selectedServiceType
+                  ? "Select dates"
+                  : "Check availability"}
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          Image gallery lightbox
+      ═══════════════════════════════════════════════════════════════════ */}
       <AnimatePresence>
         {showImageGallery && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/95 backdrop-blur-sm z-50 flex flex-col"
+            className="fixed inset-0 bg-black/95 z-50 flex flex-col"
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-6 text-white bg-gradient-to-b from-black/50 to-transparent">
-              <div className="flex items-center gap-4">
-                <span className="text-xl font-semibold">
-                  {currentImageIndex + 1} / {marinaImages.length}
-                </span>
-                <span className="text-gray-400">|</span>
-                <span className="text-gray-300">{marina.name}</span>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
+            <div className="flex items-center justify-between px-6 py-4 text-white">
+              <span className="text-sm font-medium text-white/70">
+                {currentImageIndex + 1} / {marinaImages.length}
+              </span>
+              <span className="font-semibold hidden sm:block">
+                {marina.name}
+              </span>
+              <button
                 onClick={() => setShowImageGallery(false)}
-                className="text-white hover:bg-white/20 h-12 w-12 p-0 rounded-full transition-all duration-300 hover:rotate-90"
+                className="h-9 w-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
               >
-                <X className="h-6 w-6" />
-              </Button>
+                <X className="h-5 w-5" />
+              </button>
             </div>
 
-            {/* Image Container with Side Navigation */}
-            <div className="flex-1 flex items-center justify-center px-20 relative">
-              {/* Left Arrow */}
-              <Button
-                variant="ghost"
+            {/* Image area */}
+            <div className="flex-1 flex items-center justify-center relative px-16">
+              <button
                 onClick={() =>
-                  setCurrentImageIndex((prev) =>
-                    prev > 0 ? prev - 1 : marinaImages.length - 1,
+                  setCurrentImageIndex((p) =>
+                    p > 0 ? p - 1 : marinaImages.length - 1,
                   )
                 }
-                className="absolute left-4 text-white hover:bg-white/20 rounded-full h-14 w-14 p-0 backdrop-blur-sm bg-black/30 transition-all duration-300 hover:scale-110"
+                className="absolute left-4 h-12 w-12 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
               >
-                <ChevronLeft className="h-8 w-8" />
-              </Button>
+                <ChevronLeft className="h-6 w-6" />
+              </button>
 
-              {/* Image */}
-              <motion.div
+              <motion.img
                 key={currentImageIndex}
-                initial={{ scale: 0.95, opacity: 0, x: 100 }}
-                animate={{ scale: 1, opacity: 1, x: 0 }}
-                exit={{ scale: 0.95, opacity: 0, x: -100 }}
-                transition={{ duration: 0.4, ease: "easeOut" }}
-                className="max-w-full max-h-full"
-              >
-                <img
-                  src={marinaImages[currentImageIndex]}
-                  alt={`${marina.name} - Image ${currentImageIndex + 1}`}
-                  className="max-w-full max-h-[70vh] object-contain rounded-xl shadow-2xl"
-                />
-              </motion.div>
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.25 }}
+                src={marinaImages[currentImageIndex]}
+                alt={`${marina.name} – ${currentImageIndex + 1}`}
+                className="max-h-[75vh] max-w-full object-contain rounded-lg select-none"
+              />
 
-              {/* Right Arrow */}
-              <Button
-                variant="ghost"
+              <button
                 onClick={() =>
-                  setCurrentImageIndex(
-                    (prev) => (prev + 1) % marinaImages.length,
-                  )
+                  setCurrentImageIndex((p) => (p + 1) % marinaImages.length)
                 }
-                className="absolute right-4 text-white hover:bg-white/20 rounded-full h-14 w-14 p-0 backdrop-blur-sm bg-black/30 transition-all duration-300 hover:scale-110"
+                className="absolute right-4 h-12 w-12 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
               >
-                <ChevronRight className="h-8 w-8" />
-              </Button>
+                <ChevronRight className="h-6 w-6" />
+              </button>
             </div>
 
-            {/* Thumbnail Navigation */}
-            <div className="p-6 bg-gradient-to-t from-black/50 to-transparent">
-              <div className="max-w-5xl mx-auto">
-                <div className="flex justify-center items-center space-x-3 overflow-x-auto pb-2">
-                  {marinaImages.map((img, index) => (
-                    <button
-                      key={index}
-                      onClick={() => setCurrentImageIndex(index)}
-                      className={`flex-shrink-0 transition-all duration-300 ${
-                        index === currentImageIndex
-                          ? "ring-4 ring-white shadow-2xl scale-110"
-                          : "opacity-50 hover:opacity-100 hover:scale-105"
-                      }`}
-                    >
-                      <img
-                        src={img}
-                        alt=""
-                        className="w-24 h-16 object-cover rounded-lg"
-                      />
-                    </button>
-                  ))}
-                </div>
-              </div>
+            {/* Thumbnail strip */}
+            <div className="px-6 py-4 flex justify-center gap-2 overflow-x-auto">
+              {marinaImages.map((img: string, i: number) => (
+                <button
+                  key={i}
+                  onClick={() => setCurrentImageIndex(i)}
+                  className={`shrink-0 transition-all duration-200 ${
+                    i === currentImageIndex
+                      ? "ring-2 ring-white opacity-100 scale-105"
+                      : "opacity-50 hover:opacity-75"
+                  }`}
+                >
+                  <img
+                    src={img}
+                    alt=""
+                    className="w-16 h-10 object-cover rounded"
+                  />
+                </button>
+              ))}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Authentication Modal */}
+      {/* ═══════════════════════════════════════════════════════════════════
+          Sign-in modal
+      ═══════════════════════════════════════════════════════════════════ */}
       <SignInModal
         isOpen={showSignInModal}
         onClose={() => setShowSignInModal(false)}
         onSuccess={handleAuthSuccess}
       />
-
-      {/* Booking Wizard */}
-      {selectedSlip && (
-        <BookingWizard
-          isOpen={showBookingWizard}
-          onClose={() => {
-            setShowBookingWizard(false);
-            setTimeout(() => {
-              dispatch(setSelectedSlip(null));
-            }, 300); // Wait for modal exit animation
-          }}
-          marina={marina}
-          slip={availableSlips.find((s) => s.id === selectedSlip)}
-          dateRange={selectedDateRange}
-          totalCost={
-            selectedDateRange.checkIn && selectedDateRange.checkOut
-              ? bookingDuration *
-                (availableSlips.find((s) => s.id === selectedSlip)
-                  ?.pricePerDay || 0)
-              : 0
-          }
-          serviceFee={
-            selectedDateRange.checkIn && selectedDateRange.checkOut
-              ? bookingDuration *
-                (availableSlips.find((s) => s.id === selectedSlip)
-                  ?.pricePerDay || 0) *
-                0.15
-              : 0
-          }
-          user={authUser}
-        />
-      )}
     </div>
   );
 };

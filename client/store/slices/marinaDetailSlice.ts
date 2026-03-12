@@ -4,6 +4,7 @@ import type {
   Marina,
   MarinaDetailsApiResponse,
   MarinaAvailabilityApiResponse,
+  MarinaServiceTypePricing,
   Slip,
 } from "@shared/api";
 
@@ -106,6 +107,7 @@ export interface MarinaDetail {
     bookedDates: Array<{ checkIn: string; checkOut: string }>;
   };
   coupons: any[];
+  serviceTypePricing: MarinaServiceTypePricing[];
 }
 
 // Availability data structure

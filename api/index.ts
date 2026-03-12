@@ -3400,6 +3400,127 @@ const handleManageHostMarinaImages = async (
 };
 
 /**
+ * GET /api/host/marina-management/service-pricing/:marinaId
+ * Get service type pricing for a marina (CRM)
+ */
+const handleGetMarinaServicePricing = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
+  try {
+    const hostId = Number((req as any).authHostId);
+    const marinaId = Number(req.params.marinaId);
+
+    if (!marinaId) {
+      return res
+        .status(400)
+        .json({ success: false, error: "marinaId required" });
+    }
+
+    const hasAccess = await hasHostMarinaAccess(hostId, marinaId);
+    if (!hasAccess) {
+      return res.status(403).json({ success: false, error: "Unauthorized" });
+    }
+
+    const rows = await query<RowDataPacket[]>(
+      `SELECT service_type, price_per_day, is_available, description
+       FROM marina_service_type_pricing
+       WHERE marina_id = ?
+       ORDER BY FIELD(service_type, 'slip', 'dry_stack', 'shipyard_maintenance')`,
+      [marinaId],
+    );
+
+    res.json({
+      success: true,
+      data: rows.map((r: any) => ({
+        service_type: r.service_type,
+        price_per_day: parseFloat(r.price_per_day),
+        is_available: r.is_available === 1,
+        description: r.description || null,
+      })),
+    });
+  } catch (error) {
+    console.error("Error fetching service pricing:", error);
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to fetch service pricing" });
+  }
+};
+
+/**
+ * PUT /api/host/marina-management/service-pricing/:marinaId
+ * Upsert service type pricing for a marina (CRM)
+ * Body: { pricing: Array<{ service_type, price_per_day, is_available, description? }> }
+ */
+const handleUpdateMarinaServicePricing = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
+  try {
+    const hostId = Number((req as any).authHostId);
+    const marinaId = Number(req.params.marinaId);
+
+    if (!marinaId) {
+      return res
+        .status(400)
+        .json({ success: false, error: "marinaId required" });
+    }
+
+    const hasAccess = await hasHostMarinaAccess(hostId, marinaId);
+    if (!hasAccess) {
+      return res.status(403).json({ success: false, error: "Unauthorized" });
+    }
+
+    const { pricing } = req.body as {
+      pricing: Array<{
+        service_type: string;
+        price_per_day: number;
+        is_available: boolean;
+        description?: string | null;
+      }>;
+    };
+
+    if (!Array.isArray(pricing) || pricing.length === 0) {
+      return res
+        .status(400)
+        .json({ success: false, error: "pricing array required" });
+    }
+
+    const validServiceTypes = ["slip", "dry_stack", "shipyard_maintenance"];
+
+    for (const item of pricing) {
+      if (!validServiceTypes.includes(item.service_type)) continue;
+      const pricePerDay = parseFloat(String(item.price_per_day));
+      if (isNaN(pricePerDay) || pricePerDay < 0) continue;
+
+      await query(
+        `INSERT INTO marina_service_type_pricing
+           (marina_id, service_type, price_per_day, is_available, description)
+         VALUES (?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+           price_per_day = VALUES(price_per_day),
+           is_available  = VALUES(is_available),
+           description   = VALUES(description)`,
+        [
+          marinaId,
+          item.service_type,
+          pricePerDay,
+          item.is_available ? 1 : 0,
+          item.description || null,
+        ],
+      );
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error updating service pricing:", error);
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to update service pricing" });
+  }
+};
+
+/**
  * GET /api/host/guests
  * Get all guests who have booked at host's marinas
  */
@@ -5319,7 +5440,11 @@ const handleMarinaSearch = async (req: Request, res: Response) => {
     } = req.query;
 
     const conditions: string[] = ["m.is_active = TRUE"];
-    const params: any[] = [];
+    // Separate param arrays to match SQL placeholder order:
+    // JOINs appear before WHERE in the query, so joinParams must come first
+    const conditionParams: any[] = []; // params for WHERE conditions
+    const joinParams: any[] = []; // params for JOIN subqueries
+    const availabilityParams: any[] = []; // params for availability JOIN
     const joins: string[] = [];
 
     // Helper function to parse array parameters
@@ -5331,7 +5456,6 @@ const handleMarinaSearch = async (req: Request, res: Response) => {
           .filter(Boolean);
       }
       if (typeof param === "string") {
-        // Handle comma-separated strings or single values
         return param.includes(",")
           ? param
               .split(",")
@@ -5339,45 +5463,44 @@ const handleMarinaSearch = async (req: Request, res: Response) => {
               .filter(Boolean)
           : [param];
       }
-      // Handle other types by converting to string
       if (param !== null && param !== undefined) {
         return [String(param)].filter(Boolean);
       }
       return [];
     };
 
-    // Base filtering conditions
+    // Base WHERE conditions (use conditionParams)
     if (city) {
       conditions.push("m.city = ?");
-      params.push(city);
+      conditionParams.push(city);
     }
     if (state) {
       conditions.push("m.state = ?");
-      params.push(state);
+      conditionParams.push(state);
     }
     if (businessTypeId) {
       conditions.push("m.business_type_id = ?");
-      params.push(parseInt(businessTypeId as string));
+      conditionParams.push(parseInt(businessTypeId as string));
     }
     if (minPrice) {
       conditions.push("m.price_per_day >= ?");
-      params.push(parseFloat(minPrice as string));
+      conditionParams.push(parseFloat(minPrice as string));
     }
     if (maxPrice) {
       conditions.push("m.price_per_day <= ?");
-      params.push(parseFloat(maxPrice as string));
+      conditionParams.push(parseFloat(maxPrice as string));
     }
     if (minBoatLength) {
       conditions.push("m.max_boat_length_meters >= ?");
-      params.push(parseFloat(minBoatLength as string));
+      conditionParams.push(parseFloat(minBoatLength as string));
     }
     if (maxBoatLength) {
-      conditions.push("m.max_boat_length_meters >= ?");
-      params.push(parseFloat(maxBoatLength as string));
+      conditions.push("m.max_boat_length_meters <= ?");
+      conditionParams.push(parseFloat(maxBoatLength as string));
     }
     if (minDraft) {
       conditions.push("m.max_boat_draft_meters >= ?");
-      params.push(parseFloat(minDraft as string));
+      conditionParams.push(parseFloat(minDraft as string));
     }
     if (featured === "true") {
       conditions.push("m.is_featured = TRUE");
@@ -5387,12 +5510,10 @@ const handleMarinaSearch = async (req: Request, res: Response) => {
         "(LOWER(m.name) LIKE ? OR LOWER(m.description) LIKE ? OR LOWER(m.city) LIKE ?)",
       );
       const searchPattern = `%${(searchTerm as string).toLowerCase()}%`;
-      params.push(searchPattern, searchPattern, searchPattern);
+      conditionParams.push(searchPattern, searchPattern, searchPattern);
     }
 
-    // New filter conditions
-
-    // Marina features filtering
+    // Marina features filtering (no ? params — uses literal SQL)
     const featureArray = parseArrayParam(marinaFeatures);
     if (featureArray.length > 0) {
       joins.push("INNER JOIN marina_features mf ON m.id = mf.marina_id");
@@ -5423,7 +5544,7 @@ const handleMarinaSearch = async (req: Request, res: Response) => {
       }
     }
 
-    // Seabed types filtering
+    // Seabed types filtering (use joinParams)
     const seabedArray = parseArrayParam(seabedTypes);
     if (seabedArray.length > 0) {
       const placeholders = seabedArray.map(() => "?").join(", ");
@@ -5435,11 +5556,11 @@ const handleMarinaSearch = async (req: Request, res: Response) => {
         ) AS seabed_filter ON m.id = seabed_filter.marina_id
       `);
       seabedArray.forEach((typeId: string) =>
-        params.push(parseInt(typeId, 10)),
+        joinParams.push(parseInt(typeId, 10)),
       );
     }
 
-    // Mooring types filtering
+    // Mooring types filtering (use joinParams)
     const mooringArray = parseArrayParam(mooringTypes);
     if (mooringArray.length > 0) {
       const placeholders = mooringArray.map(() => "?").join(", ");
@@ -5451,11 +5572,11 @@ const handleMarinaSearch = async (req: Request, res: Response) => {
         ) AS mooring_filter ON m.id = mooring_filter.marina_id
       `);
       mooringArray.forEach((typeId: string) =>
-        params.push(parseInt(typeId, 10)),
+        joinParams.push(parseInt(typeId, 10)),
       );
     }
 
-    // Point types filtering
+    // Point types filtering (use joinParams)
     const pointArray = parseArrayParam(pointTypes);
     if (pointArray.length > 0) {
       const placeholders = pointArray.map(() => "?").join(", ");
@@ -5466,10 +5587,12 @@ const handleMarinaSearch = async (req: Request, res: Response) => {
           WHERE p.point_type_id IN (${placeholders})
         ) AS point_filter ON m.id = point_filter.marina_id
       `);
-      pointArray.forEach((typeId: string) => params.push(parseInt(typeId, 10)));
+      pointArray.forEach((typeId: string) =>
+        joinParams.push(parseInt(typeId, 10)),
+      );
     }
 
-    // Anchorage types filtering
+    // Anchorage types filtering (use joinParams)
     const anchorageArray = parseArrayParam(anchorageTypes);
     if (anchorageArray.length > 0) {
       const placeholders = anchorageArray.map(() => "?").join(", ");
@@ -5481,11 +5604,11 @@ const handleMarinaSearch = async (req: Request, res: Response) => {
         ) AS anchorage_filter ON m.id = anchorage_filter.marina_id
       `);
       anchorageArray.forEach((typeId: string) =>
-        params.push(parseInt(typeId, 10)),
+        joinParams.push(parseInt(typeId, 10)),
       );
     }
 
-    // Protection level filtering (for anchorages)
+    // Protection level filtering (use joinParams)
     if (protectionLevel && protectionLevel !== "all") {
       joins.push(`
         INNER JOIN (
@@ -5494,10 +5617,10 @@ const handleMarinaSearch = async (req: Request, res: Response) => {
           WHERE a.protection_level = ?
         ) AS protection_filter ON m.id = protection_filter.marina_id
       `);
-      params.push(protectionLevel);
+      joinParams.push(protectionLevel);
     }
 
-    // Amenities filtering (existing logic with better array handling)
+    // Amenities filtering (use joinParams)
     const amenitiesArray = parseArrayParam(amenities);
     if (amenitiesArray.length > 0) {
       const placeholders = amenitiesArray.map(() => "?").join(", ");
@@ -5511,10 +5634,11 @@ const handleMarinaSearch = async (req: Request, res: Response) => {
           HAVING amenity_count = ?
         ) AS amenity_filter ON m.id = amenity_filter.marina_id
       `);
-      amenitiesArray.forEach((amenity: string) => params.push(amenity));
-      params.push(amenitiesArray.length);
+      amenitiesArray.forEach((amenity: string) => joinParams.push(amenity));
+      joinParams.push(amenitiesArray.length);
     }
 
+    // Availability JOIN (use availabilityParams)
     let availabilityJoin = "";
     if (checkIn && checkOut) {
       availabilityJoin = `
@@ -5540,7 +5664,7 @@ const handleMarinaSearch = async (req: Request, res: Response) => {
           )
         ) AS available_marinas ON m.id = available_marinas.marina_id
       `;
-      params.push(
+      availabilityParams.push(
         checkIn,
         checkIn,
         checkOut,
@@ -5551,6 +5675,16 @@ const handleMarinaSearch = async (req: Request, res: Response) => {
         checkOut,
       );
     }
+
+    // Final params order must match SQL placeholder order:
+    // 1. joinParams (for JOINs, which appear first in FROM clause)
+    // 2. availabilityParams (for availability JOIN)
+    // 3. conditionParams (for WHERE clause)
+    const allParams = [
+      ...joinParams,
+      ...availabilityParams,
+      ...conditionParams,
+    ];
 
     const queryStr = `
       SELECT m.*, bt.name as business_type_name,
@@ -5567,17 +5701,22 @@ const handleMarinaSearch = async (req: Request, res: Response) => {
       ${joins.join(" ")}
       ${availabilityJoin}
       WHERE ${conditions.join(" AND ")}
-      ORDER BY m.is_featured DESC, m.created_at DESC
+      ORDER BY
+        m.is_directory_only ASC,
+        m.is_featured DESC,
+        avg_rating DESC,
+        m.created_at DESC
       LIMIT ? OFFSET ?
     `;
-    params.push(parseInt(limit as string), parseInt(offset as string));
+    const queryParams = [
+      ...allParams,
+      parseInt(limit as string),
+      parseInt(offset as string),
+    ];
 
-    const marinas = await query<RowDataPacket[]>(queryStr, params);
+    const marinas = await query<RowDataPacket[]>(queryStr, queryParams);
     const totalQuery = `SELECT COUNT(DISTINCT m.id) as total FROM marinas m ${joins.join(" ")} ${availabilityJoin} WHERE ${conditions.join(" AND ")}`;
-    const totalResult = await query<RowDataPacket[]>(
-      totalQuery,
-      params.slice(0, -2),
-    );
+    const totalResult = await query<RowDataPacket[]>(totalQuery, allParams);
     const total = (totalResult[0] as any)?.total || 0;
 
     res.json({
@@ -5946,6 +6085,14 @@ const handleMarinaDetails = async (req: Request, res: Response) => {
 
     const marina = marinas[0];
 
+    // Fetch service type pricing for this marina
+    const servicePricingRows = await query<RowDataPacket[]>(
+      `SELECT service_type, price_per_day, is_available, description
+       FROM marina_service_type_pricing
+       WHERE marina_id = ?`,
+      [marina.id],
+    );
+
     // Build images from inline columns (cover_image_url + gallery_image_urls JSON array)
     const galleryUrls: string[] = marina.gallery_image_urls
       ? JSON.parse(marina.gallery_image_urls)
@@ -6031,6 +6178,12 @@ const handleMarinaDetails = async (req: Request, res: Response) => {
         bookedDates: [],
       },
       coupons: [],
+      serviceTypePricing: servicePricingRows.map((row: any) => ({
+        service_type: row.service_type,
+        price_per_day: parseFloat(row.price_per_day),
+        is_available: row.is_available === 1,
+        description: row.description || null,
+      })),
     };
 
     res.json({ success: true, data: transformedMarina });
@@ -6067,9 +6220,13 @@ const handleMyBookings = async (req: AuthenticatedRequest, res: Response) => {
 
     if (
       status &&
-      ["pending", "confirmed", "cancelled", "completed"].includes(
-        status as string,
-      )
+      [
+        "pending",
+        "confirmed",
+        "cancelled",
+        "completed",
+        "pending_approval",
+      ].includes(status as string)
     ) {
       queryStr += " AND b.status = ?";
       params.push(status);
@@ -6090,6 +6247,7 @@ const handleMyBookings = async (req: AuthenticatedRequest, res: Response) => {
       serviceFee: parseFloat(booking.service_fee),
       discountAmount: parseFloat(booking.discount_amount) || 0,
       totalAmount: parseFloat(booking.total_amount),
+      serviceType: booking.service_type || "slip",
       couponCode: booking.coupon_code,
       status: booking.status,
       stripePaymentIntentId: booking.stripe_payment_intent_id,
@@ -6149,6 +6307,8 @@ const handleCreatePaymentIntent = async (req: Request, res: Response) => {
       checkOut,
       couponCode,
       specialRequests,
+      serviceType,
+      paymentMethodId,
       isMobileApp,
     } = req.body;
 
@@ -6171,7 +6331,50 @@ const handleCreatePaymentIntent = async (req: Request, res: Response) => {
     const totalDays = Math.ceil(
       (checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24),
     );
-    const pricePerDay = marina.price_per_day;
+
+    // Validate service type
+    const validServiceTypes = ["slip", "dry_stack", "shipyard_maintenance"];
+    const resolvedServiceType = validServiceTypes.includes(serviceType)
+      ? serviceType
+      : "slip";
+
+    // slip_id is only valid for slip bookings. Non-slip services must store NULL.
+    let resolvedSlipId: number | null = null;
+    if (resolvedServiceType === "slip") {
+      const parsedSlipId = Number(slipId);
+      if (!Number.isInteger(parsedSlipId) || parsedSlipId <= 0) {
+        return res.status(400).json({
+          success: false,
+          error: "Slip selection is required for slip bookings",
+        });
+      }
+
+      const slips = await query<RowDataPacket[]>(
+        `SELECT id FROM slips WHERE id = ? AND marina_id = ? LIMIT 1`,
+        [parsedSlipId, marinaId],
+      );
+
+      if (slips.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: "Selected slip does not exist for this marina",
+        });
+      }
+
+      resolvedSlipId = parsedSlipId;
+    }
+
+    // Look up service type pricing for this marina; fall back to marina default
+    const servicePricingRows = await query<RowDataPacket[]>(
+      `SELECT price_per_day FROM marina_service_type_pricing
+       WHERE marina_id = ? AND service_type = ? AND is_available = 1`,
+      [marinaId, resolvedServiceType],
+    );
+    const pricePerDay =
+      servicePricingRows.length > 0
+        ? parseFloat(servicePricingRows[0].price_per_day)
+        : parseFloat(marina.price_per_day);
+
     const subtotal = pricePerDay * totalDays;
     const serviceFee = subtotal * 0.1;
     let discountAmount = 0;
@@ -6192,19 +6395,44 @@ const handleCreatePaymentIntent = async (req: Request, res: Response) => {
 
     const totalAmount = subtotal + serviceFee - discountAmount;
 
+    // Load user stripe customer for saved payment method support
+    const users = await query<RowDataPacket[]>(
+      `SELECT id, email, full_name, stripe_customer_id
+       FROM users WHERE id = ? LIMIT 1`,
+      [userId],
+    );
+    const user = users[0];
+    if (!user) {
+      return res.status(404).json({ success: false, error: "User not found" });
+    }
+
     // Create Stripe PaymentIntent FIRST before booking
     console.log("Creating payment intent for amount:", totalAmount);
 
     const stripeClient = await getStripeClient(!!isMobileApp);
     let paymentIntent;
     try {
-      paymentIntent = await stripeClient.paymentIntents.create({
+      const stripePayload: Stripe.PaymentIntentCreateParams = {
         amount: Math.round(totalAmount * 100),
         currency: "usd",
         metadata: {
           marinaId: marinaId.toString(),
           userId: userId.toString(),
         },
+      };
+
+      if (paymentMethodId) {
+        if (!user.stripe_customer_id) {
+          return res.status(400).json({
+            success: false,
+            error: "No Stripe customer found for selected payment method",
+          });
+        }
+        stripePayload.customer = user.stripe_customer_id;
+      }
+
+      paymentIntent = await stripeClient.paymentIntents.create({
+        ...stripePayload,
       });
     } catch (stripeError: any) {
       console.error("Stripe API error:", stripeError);
@@ -6228,13 +6456,13 @@ const handleCreatePaymentIntent = async (req: Request, res: Response) => {
     const bookingResult = await query<ResultSetHeader>(
       `INSERT INTO bookings (user_id, marina_id, boat_id, slip_id, check_in_date, check_out_date,
        total_days, price_per_day, subtotal, service_fee, discount_amount, total_amount,
-       coupon_code, special_requests, status, stripe_payment_intent_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, NOW(), NOW())`,
+       coupon_code, special_requests, service_type, status, stripe_payment_intent_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, NOW(), NOW())`,
       [
         userId,
         marinaId,
         boatId,
-        slipId,
+        resolvedSlipId,
         checkIn,
         checkOut,
         totalDays,
@@ -6245,6 +6473,7 @@ const handleCreatePaymentIntent = async (req: Request, res: Response) => {
         totalAmount,
         couponCode || null,
         specialRequests || null,
+        resolvedServiceType,
         paymentIntent.id,
       ],
     );
@@ -6271,6 +6500,125 @@ const handleCreatePaymentIntent = async (req: Request, res: Response) => {
     res
       .status(500)
       .json({ success: false, error: "Failed to create payment intent" });
+  }
+};
+
+/**
+ * GET /api/payments/methods
+ * List saved payment methods for the authenticated user
+ */
+const handleGetSavedPaymentMethods = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
+  try {
+    const userId = req.authUserId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: "Unauthorized" });
+    }
+
+    const users = await query<RowDataPacket[]>(
+      `SELECT id, email, full_name, stripe_customer_id
+       FROM users WHERE id = ? LIMIT 1`,
+      [userId],
+    );
+    const user = users[0];
+    if (!user) {
+      return res.status(404).json({ success: false, error: "User not found" });
+    }
+
+    if (!user.stripe_customer_id) {
+      return res.json({
+        success: true,
+        methods: [],
+        defaultPaymentMethodId: null,
+      });
+    }
+
+    const stripeClient = await getStripeClient(false);
+    const [customer, paymentMethods] = await Promise.all([
+      stripeClient.customers.retrieve(user.stripe_customer_id),
+      stripeClient.paymentMethods.list({
+        customer: user.stripe_customer_id,
+        type: "card",
+      }),
+    ]);
+
+    const defaultPaymentMethodId = (customer as Stripe.Customer)
+      .invoice_settings?.default_payment_method as string | null;
+
+    const methods = paymentMethods.data.map((pm) => ({
+      id: pm.id,
+      brand: pm.card?.brand || "card",
+      last4: pm.card?.last4 || "",
+      expMonth: pm.card?.exp_month || 0,
+      expYear: pm.card?.exp_year || 0,
+      isDefault: pm.id === defaultPaymentMethodId,
+    }));
+
+    res.json({ success: true, methods, defaultPaymentMethodId });
+  } catch (error) {
+    console.error("Error getting saved payment methods:", error);
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to fetch payment methods" });
+  }
+};
+
+/**
+ * POST /api/payments/setup-intent
+ * Create a setup intent so a user can attach a new card
+ */
+const handleCreateSetupIntent = async (
+  req: AuthenticatedRequest,
+  res: Response,
+) => {
+  try {
+    const userId = req.authUserId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: "Unauthorized" });
+    }
+
+    const users = await query<RowDataPacket[]>(
+      `SELECT id, email, full_name, stripe_customer_id
+       FROM users WHERE id = ? LIMIT 1`,
+      [userId],
+    );
+    const user = users[0];
+    if (!user) {
+      return res.status(404).json({ success: false, error: "User not found" });
+    }
+
+    const stripeClient = await getStripeClient(false);
+
+    let customerId: string = user.stripe_customer_id;
+    if (!customerId) {
+      const customer = await stripeClient.customers.create({
+        email: user.email || undefined,
+        name: user.full_name || undefined,
+        metadata: { userId: String(userId) },
+      });
+      customerId = customer.id;
+
+      await query(
+        `UPDATE users SET stripe_customer_id = ?, updated_at = NOW() WHERE id = ?`,
+        [customerId, userId],
+      );
+    }
+
+    const setupIntent = await stripeClient.setupIntents.create({
+      customer: customerId,
+      payment_method_types: ["card"],
+      usage: "off_session",
+      metadata: { userId: String(userId) },
+    });
+
+    res.json({ success: true, clientSecret: setupIntent.client_secret });
+  } catch (error) {
+    console.error("Error creating setup intent:", error);
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to create setup intent" });
   }
 };
 
@@ -6545,6 +6893,7 @@ const handleGetBoats = async (req: AuthenticatedRequest, res: Response) => {
       registration_number: boat.registration_number,
       insurance_provider: boat.insurance_provider,
       insurance_policy_number: boat.insurance_policy_number,
+      photo_url: boat.photo_url || null,
     }));
 
     res.json({ success: true, boats: transformedBoats });
@@ -6608,6 +6957,7 @@ const handleCreateBoat = async (req: AuthenticatedRequest, res: Response) => {
       registration_number,
       insurance_provider,
       insurance_policy_number,
+      photo_url,
     } = req.body;
 
     if (!boat_name || !length_meters) {
@@ -6619,8 +6969,8 @@ const handleCreateBoat = async (req: AuthenticatedRequest, res: Response) => {
     const result = await query<ResultSetHeader>(
       `INSERT INTO boats (owner_id, name, boat_type_id, manufacturer, model, year,
        length_meters, width_meters, draft_meters, home_marina, registration_number,
-       insurance_provider, insurance_policy_number, is_active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, NOW(), NOW())`,
+       insurance_provider, insurance_policy_number, photo_url, is_active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, NOW(), NOW())`,
       [
         userId,
         boat_name,
@@ -6635,6 +6985,7 @@ const handleCreateBoat = async (req: AuthenticatedRequest, res: Response) => {
         registration_number || null,
         insurance_provider || null,
         insurance_policy_number || null,
+        photo_url || null,
       ],
     );
 
@@ -6666,6 +7017,7 @@ const handleCreateBoat = async (req: AuthenticatedRequest, res: Response) => {
       registration_number: boat.registration_number,
       insurance_provider: boat.insurance_provider,
       insurance_policy_number: boat.insurance_policy_number,
+      photo_url: boat.photo_url || null,
     };
 
     res.status(201).json({ success: true, boat: transformedBoat });
@@ -6702,13 +7054,14 @@ const handleUpdateBoat = async (req: Request, res: Response) => {
       registrationNumber,
       insuranceProvider,
       insurancePolicyNumber,
+      photoUrl,
     } = req.body;
 
     await query(
       `UPDATE boats SET name = ?, model = ?, manufacturer = ?, boat_type_id = ?,
        year = ?, length_meters = ?, width_meters = ?, draft_meters = ?,
        home_marina = ?, registration_number = ?, insurance_provider = ?,
-       insurance_policy_number = ?, updated_at = NOW()
+       insurance_policy_number = ?, photo_url = ?, updated_at = NOW()
        WHERE id = ?`,
       [
         name,
@@ -6723,6 +7076,7 @@ const handleUpdateBoat = async (req: Request, res: Response) => {
         registrationNumber || null,
         insuranceProvider || null,
         insurancePolicyNumber || null,
+        photoUrl || null,
         id,
       ],
     );
@@ -6752,6 +7106,7 @@ const handleUpdateBoat = async (req: Request, res: Response) => {
       home_marina: boat.home_marina,
       insurance_provider: boat.insurance_provider,
       insurance_policy_number: boat.insurance_policy_number,
+      photo_url: boat.photo_url || null,
       is_active: boat.is_active === 1,
       created_at: boat.created_at,
       updated_at: boat.updated_at,
@@ -7421,6 +7776,16 @@ function createServer() {
     handleCreatePaymentIntent,
   );
   expressApp.post("/api/bookings/confirm", handleConfirmBooking);
+  expressApp.get(
+    "/api/payments/methods",
+    verifyUserSession,
+    handleGetSavedPaymentMethods,
+  );
+  expressApp.post(
+    "/api/payments/setup-intent",
+    verifyUserSession,
+    handleCreateSetupIntent,
+  );
   expressApp.post("/api/bookings/validate-coupon", handleValidateCoupon);
   expressApp.post("/api/bookings/cancel", handleCancelBooking);
   expressApp.get(
@@ -7494,6 +7859,16 @@ function createServer() {
     "/api/host/marina-management/images",
     verifyHostSession,
     handleManageHostMarinaImages,
+  );
+  expressApp.get(
+    "/api/host/marina-management/service-pricing/:marinaId",
+    verifyHostSession,
+    handleGetMarinaServicePricing,
+  );
+  expressApp.put(
+    "/api/host/marina-management/service-pricing/:marinaId",
+    verifyHostSession,
+    handleUpdateMarinaServicePricing,
   );
   expressApp.get("/api/host/guests", verifyHostSession, handleHostGuests);
   expressApp.get("/api/host/payments", verifyHostSession, handleHostPayments);

@@ -64,10 +64,10 @@ const SignInModal: React.FC<SignInModalProps> = ({
 
   // Handle successful authentication
   useEffect(() => {
-    if (isAuthenticated && user) {
+    if (isOpen && isAuthenticated && user) {
       onSuccess(user);
     }
-  }, [isAuthenticated, user, onSuccess]);
+  }, [isOpen, isAuthenticated, user, onSuccess]);
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

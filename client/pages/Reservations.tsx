@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import Layout from "@/components/Layout";
 import MetaHelmet from "@/components/MetaHelmet";
@@ -12,12 +12,18 @@ import {
   Clock,
   Euro,
   Anchor,
+  Layers,
+  Wrench,
   Plus,
   Filter,
   ArrowRight,
   Loader2,
   Ship,
   AlertCircle,
+  MessageSquareText,
+  Wallet,
+  ClipboardCheck,
+  CircleDashed,
 } from "lucide-react";
 import {
   Select,
@@ -44,6 +50,8 @@ const Reservations = () => {
   } = useAppSelector((state) => state.reservations);
 
   const [statusFilter, setStatusFilterLocal] = useState("all");
+  const [serviceTypeFilter, setServiceTypeFilter] = useState("all");
+  const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
     dispatch(
@@ -98,6 +106,29 @@ const Reservations = () => {
     });
   };
 
+  const getServiceTypeMeta = (serviceType?: string) => {
+    switch (serviceType) {
+      case "dry_stack":
+        return {
+          label: "Dry Stack",
+          className: "bg-sky-100 text-sky-800 border-sky-200",
+          icon: Layers,
+        };
+      case "shipyard_maintenance":
+        return {
+          label: "Shipyard",
+          className: "bg-violet-100 text-violet-800 border-violet-200",
+          icon: Wrench,
+        };
+      default:
+        return {
+          label: "Marina Slip",
+          className: "bg-ocean-100 text-ocean-800 border-ocean-200",
+          icon: Anchor,
+        };
+    }
+  };
+
   const getUpcomingReservations = () => {
     return filteredReservations.filter((reservation) => {
       const checkIn = new Date(reservation.checkInDate);
@@ -112,6 +143,44 @@ const Reservations = () => {
   };
 
   const upcomingCount = getUpcomingReservations().length;
+
+  const displayedReservations = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+
+    return filteredReservations.filter((reservation) => {
+      const matchesServiceType =
+        serviceTypeFilter === "all" ||
+        reservation.serviceType === serviceTypeFilter;
+
+      const matchesSearch =
+        !normalizedSearch ||
+        reservation.marina.name.toLowerCase().includes(normalizedSearch) ||
+        reservation.marina.city.toLowerCase().includes(normalizedSearch);
+
+      return matchesServiceType && matchesSearch;
+    });
+  }, [filteredReservations, serviceTypeFilter, searchTerm]);
+
+  const dashboardStats = useMemo(() => {
+    const active = displayedReservations.filter((r) =>
+      ["confirmed", "pending", "pending_approval"].includes(r.status),
+    ).length;
+
+    const pendingApproval = displayedReservations.filter(
+      (r) => r.status === "pending_approval",
+    ).length;
+
+    const totalBookedValue = displayedReservations.reduce(
+      (sum, r) => sum + r.totalAmount,
+      0,
+    );
+
+    return {
+      active,
+      pendingApproval,
+      totalBookedValue,
+    };
+  }, [displayedReservations]);
 
   const listVariants = {
     hidden: { opacity: 0 },
@@ -132,8 +201,8 @@ const Reservations = () => {
     <Layout>
       <MetaHelmet
         title="My Reservations - DockNow"
-        description="View and manage your marina slip reservations. Track upcoming bookings, view past stays, and manage your boat docking schedule with DockNow."
-        keywords="marina reservations, booking management, my bookings, boat slip reservations, marina schedule"
+        description="View and manage your DockNow reservations across slip, dry stack, and shipyard services. Track active bookings, statuses, and upcoming marina stays in one dashboard."
+        keywords="docknow reservations dashboard, marina reservations, dry stack bookings, shipyard bookings, booking management"
         url={typeof window !== "undefined" ? window.location.href : ""}
         type="website"
         noindex={true}
@@ -143,15 +212,27 @@ const Reservations = () => {
         <div className="relative bg-navy-950 pt-32 pb-20 overflow-hidden">
           <motion.div
             animate={{
-              x: [-20, 20],
-              opacity: [0.1, 0.15, 0.1],
+              x: [-30, 30],
+              opacity: [0.1, 0.16, 0.1],
             }}
             transition={{
-              duration: 10,
+              duration: 12,
               repeat: Infinity,
               repeatType: "mirror",
             }}
-            className="absolute -bottom-24 -left-24 w-96 h-96 bg-purple-500 rounded-full blur-[100px]"
+            className="absolute -bottom-24 -left-24 w-96 h-96 bg-ocean-500 rounded-full blur-[100px]"
+          />
+          <motion.div
+            animate={{
+              y: [-15, 15],
+              opacity: [0.08, 0.14, 0.08],
+            }}
+            transition={{
+              duration: 14,
+              repeat: Infinity,
+              repeatType: "mirror",
+            }}
+            className="absolute -top-16 -right-10 w-80 h-80 bg-cyan-400 rounded-full blur-[110px]"
           />
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
             <div className="text-center">
@@ -168,7 +249,7 @@ const Reservations = () => {
                 transition={{ delay: 0.1 }}
                 className="text-xl text-ocean-100/80 max-w-2xl mx-auto"
               >
-                Manage your global docking reservations and trip history.
+                A single dashboard for slip, dry stack, and shipyard bookings.
               </motion.p>
             </div>
           </div>
@@ -179,6 +260,61 @@ const Reservations = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
+            className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8"
+          >
+            <Card className="border-none shadow-sm">
+              <CardContent className="p-5 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold text-navy-400 uppercase tracking-widest">
+                    Active Bookings
+                  </p>
+                  <p className="text-3xl font-black text-navy-900 mt-2">
+                    {dashboardStats.active}
+                  </p>
+                </div>
+                <div className="w-11 h-11 rounded-xl bg-ocean-50 text-ocean-600 flex items-center justify-center">
+                  <ClipboardCheck className="w-5 h-5" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-none shadow-sm">
+              <CardContent className="p-5 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold text-navy-400 uppercase tracking-widest">
+                    Pending Approval
+                  </p>
+                  <p className="text-3xl font-black text-navy-900 mt-2">
+                    {dashboardStats.pendingApproval}
+                  </p>
+                </div>
+                <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                  <CircleDashed className="w-5 h-5" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-none shadow-sm">
+              <CardContent className="p-5 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold text-navy-400 uppercase tracking-widest">
+                    Booked Value
+                  </p>
+                  <p className="text-3xl font-black text-navy-900 mt-2">
+                    €{dashboardStats.totalBookedValue.toFixed(0)}
+                  </p>
+                </div>
+                <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                  <Wallet className="w-5 h-5" />
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.25 }}
             className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12"
           >
             <div>
@@ -193,6 +329,23 @@ const Reservations = () => {
               </p>
             </div>
             <div className="flex gap-3">
+              <Select
+                value={serviceTypeFilter}
+                onValueChange={setServiceTypeFilter}
+              >
+                <SelectTrigger className="w-44 h-12 rounded-xl border-navy-200 bg-white hover:bg-navy-50">
+                  <div className="flex items-center gap-2">
+                    <Anchor className="w-4 h-4" />
+                    <SelectValue placeholder="Service" />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Services</SelectItem>
+                  <SelectItem value="slip">Marina Slip</SelectItem>
+                  <SelectItem value="dry_stack">Dry Stack</SelectItem>
+                  <SelectItem value="shipyard_maintenance">Shipyard</SelectItem>
+                </SelectContent>
+              </Select>
               <Select
                 value={statusFilter}
                 onValueChange={handleStatusFilterChange}
@@ -214,6 +367,12 @@ const Reservations = () => {
                   <SelectItem value="cancelled">Cancelled</SelectItem>
                 </SelectContent>
               </Select>
+              <input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search marina or city"
+                className="h-12 w-56 rounded-xl border border-navy-200 bg-white px-4 text-sm outline-none focus:ring-2 focus:ring-ocean-500"
+              />
               <Link to="/discover">
                 <Button className="h-12 rounded-xl bg-gradient-ocean hover:shadow-glow text-white border-none px-6 flex items-center gap-2">
                   <Plus className="w-4 h-4" />
@@ -264,135 +423,166 @@ const Reservations = () => {
           )}
 
           {/* Reservations List */}
-          {!isLoading && !error && filteredReservations.length > 0 && (
+          {!isLoading && !error && displayedReservations.length > 0 && (
             <motion.div
               variants={listVariants}
               initial="hidden"
               animate="visible"
               className="space-y-8"
             >
-              {filteredReservations.map((reservation) => (
+              {displayedReservations.map((reservation) => (
                 <motion.div key={reservation.id} variants={itemVariants}>
-                  <Card className="hover:shadow-2xl transition-all duration-500 border-none shadow-xl bg-white group overflow-hidden">
-                    <CardContent className="p-0">
-                      <div className="flex flex-col md:flex-row">
-                        <div className="md:w-48 bg-navy-50 flex items-center justify-center p-8 md:p-0 relative">
-                          <motion.div
-                            whileHover={{ rotate: 360 }}
-                            transition={{ duration: 0.8 }}
-                            className="w-16 h-16 bg-white rounded-2xl shadow-lg flex items-center justify-center text-ocean-600"
-                          >
-                            <Anchor className="w-8 h-8" />
-                          </motion.div>
-                        </div>
-                        <div className="flex-1 p-8">
-                          <div className="flex justify-between items-start mb-6">
-                            <div>
-                              <Link
-                                to={`/discover/${reservation.marina.slug}`}
-                                className="text-2xl font-bold text-navy-900 mb-1 group-hover:text-ocean-600 transition-colors hover:underline"
-                              >
-                                {reservation.marina.name}
-                              </Link>
-                              <p className="text-navy-400 flex items-center gap-1.5 font-medium">
-                                <MapPin className="w-4 h-4 text-ocean-500" />
-                                {reservation.marina.city},{" "}
-                                {reservation.marina.state}
-                              </p>
-                              {reservation.boat && (
-                                <p className="text-navy-400 flex items-center gap-1.5 font-medium mt-1">
-                                  <Ship className="w-4 h-4 text-ocean-500" />
-                                  {reservation.boat.name}
-                                </p>
-                              )}
-                            </div>
-                            <Badge
-                              className={`${getStatusColor(reservation.status)} border px-4 py-1 rounded-full text-xs font-bold tracking-wider uppercase`}
-                            >
-                              {getStatusLabel(reservation.status)}
-                            </Badge>
-                          </div>
+                  {(() => {
+                    const serviceTypeMeta = getServiceTypeMeta(
+                      reservation.serviceType,
+                    );
+                    const ServiceTypeIcon = serviceTypeMeta.icon;
 
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 mb-8">
-                            <div className="space-y-1">
-                              <p className="text-xs font-bold text-navy-300 uppercase tracking-widest">
-                                Check-in
-                              </p>
-                              <div className="flex items-center gap-2 text-navy-900 font-bold">
-                                <Calendar className="w-4 h-4 text-ocean-500" />
-                                {formatDate(reservation.checkInDate)}
+                    return (
+                      <Card className="hover:shadow-2xl transition-all duration-500 border-none shadow-xl bg-white group overflow-hidden">
+                        <CardContent className="p-0">
+                          <div className="flex flex-col md:flex-row">
+                            <div className="md:w-48 bg-navy-50 flex items-center justify-center p-8 md:p-0 relative">
+                              <motion.div
+                                whileHover={{ rotate: 360 }}
+                                transition={{ duration: 0.8 }}
+                                className="w-16 h-16 bg-white rounded-2xl shadow-lg flex items-center justify-center text-ocean-600"
+                              >
+                                <ServiceTypeIcon className="w-8 h-8" />
+                              </motion.div>
+                            </div>
+                            <div className="flex-1 p-8">
+                              <div className="flex justify-between items-start mb-6">
+                                <div>
+                                  <Link
+                                    to={`/discover/${reservation.marina.slug}`}
+                                    className="text-2xl font-bold text-navy-900 mb-1 group-hover:text-ocean-600 transition-colors hover:underline"
+                                  >
+                                    {reservation.marina.name}
+                                  </Link>
+                                  <p className="text-navy-400 flex items-center gap-1.5 font-medium">
+                                    <MapPin className="w-4 h-4 text-ocean-500" />
+                                    {reservation.marina.city},{" "}
+                                    {reservation.marina.state}
+                                  </p>
+                                  {reservation.boat && (
+                                    <p className="text-navy-400 flex items-center gap-1.5 font-medium mt-1">
+                                      <Ship className="w-4 h-4 text-ocean-500" />
+                                      {reservation.boat.name}
+                                    </p>
+                                  )}
+                                  <div className="mt-3">
+                                    <Badge
+                                      className={`${serviceTypeMeta.className} border px-3 py-1 rounded-full text-[11px] font-bold tracking-wider uppercase inline-flex items-center gap-1.5`}
+                                    >
+                                      <ServiceTypeIcon className="w-3.5 h-3.5" />
+                                      {serviceTypeMeta.label}
+                                    </Badge>
+                                  </div>
+                                </div>
+                                <Badge
+                                  className={`${getStatusColor(reservation.status)} border px-4 py-1 rounded-full text-xs font-bold tracking-wider uppercase`}
+                                >
+                                  {getStatusLabel(reservation.status)}
+                                </Badge>
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 mb-8">
+                                <div className="space-y-1">
+                                  <p className="text-xs font-bold text-navy-300 uppercase tracking-widest">
+                                    Check-in
+                                  </p>
+                                  <div className="flex items-center gap-2 text-navy-900 font-bold">
+                                    <Calendar className="w-4 h-4 text-ocean-500" />
+                                    {formatDate(reservation.checkInDate)}
+                                  </div>
+                                </div>
+
+                                <div className="space-y-1">
+                                  <p className="text-xs font-bold text-navy-300 uppercase tracking-widest">
+                                    Nights
+                                  </p>
+                                  <div className="flex items-center gap-2 text-navy-900 font-bold">
+                                    <Clock className="w-4 h-4 text-ocean-500" />
+                                    {reservation.totalDays}{" "}
+                                    {reservation.totalDays === 1
+                                      ? "Night"
+                                      : "Nights"}
+                                  </div>
+                                </div>
+
+                                <div className="space-y-1 text-right sm:text-left">
+                                  <p className="text-xs font-bold text-navy-300 uppercase tracking-widest">
+                                    Total
+                                  </p>
+                                  <div className="flex items-center justify-end sm:justify-start gap-2 text-2xl font-black text-navy-900">
+                                    <Euro className="w-5 h-5 text-ocean-600" />
+                                    {reservation.totalAmount.toFixed(2)}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {reservation.serviceType === "slip" &&
+                                reservation.slip && (
+                                  <div className="mb-4 text-sm text-gray-600">
+                                    <span className="font-medium">Slip:</span>{" "}
+                                    {reservation.slip.number}
+                                  </div>
+                                )}
+
+                              <div className="flex flex-wrap gap-3 pt-6 border-t border-navy-50">
+                                <Link
+                                  to={`/discover/${reservation.marina.slug}`}
+                                >
+                                  <Button
+                                    variant="outline"
+                                    className="rounded-xl border-navy-100 hover:bg-navy-50 font-bold px-6"
+                                  >
+                                    View Marina
+                                  </Button>
+                                </Link>
+                                <Link
+                                  to={`/reservations/${reservation.id}/conversation`}
+                                >
+                                  <Button
+                                    variant="outline"
+                                    className="rounded-xl border-navy-100 hover:bg-navy-50 font-bold px-6 inline-flex items-center gap-2"
+                                  >
+                                    <MessageSquareText className="w-4 h-4" />
+                                    Conversation
+                                  </Button>
+                                </Link>
+                                {reservation.marina.phone && (
+                                  <Button
+                                    variant="outline"
+                                    className="rounded-xl border-navy-100 hover:bg-navy-50 font-bold px-6"
+                                  >
+                                    Contact Marina
+                                  </Button>
+                                )}
+                                {(reservation.status === "confirmed" ||
+                                  reservation.status === "pending") && (
+                                  <Button
+                                    variant="ghost"
+                                    className="text-red-500 hover:text-red-600 hover:bg-red-50 rounded-xl font-bold ml-auto"
+                                  >
+                                    Request Cancellation
+                                  </Button>
+                                )}
                               </div>
                             </div>
-
-                            <div className="space-y-1">
-                              <p className="text-xs font-bold text-navy-300 uppercase tracking-widest">
-                                Nights
-                              </p>
-                              <div className="flex items-center gap-2 text-navy-900 font-bold">
-                                <Clock className="w-4 h-4 text-ocean-500" />
-                                {reservation.totalDays}{" "}
-                                {reservation.totalDays === 1
-                                  ? "Night"
-                                  : "Nights"}
-                              </div>
-                            </div>
-
-                            <div className="space-y-1 text-right sm:text-left">
-                              <p className="text-xs font-bold text-navy-300 uppercase tracking-widest">
-                                Total
-                              </p>
-                              <div className="flex items-center justify-end sm:justify-start gap-2 text-2xl font-black text-navy-900">
-                                <Euro className="w-5 h-5 text-ocean-600" />
-                                {reservation.totalAmount.toFixed(2)}
-                              </div>
-                            </div>
                           </div>
-
-                          {reservation.slip && (
-                            <div className="mb-4 text-sm text-gray-600">
-                              <span className="font-medium">Slip:</span>{" "}
-                              {reservation.slip.number}
-                            </div>
-                          )}
-
-                          <div className="flex flex-wrap gap-3 pt-6 border-t border-navy-50">
-                            <Link to={`/discover/${reservation.marina.slug}`}>
-                              <Button
-                                variant="outline"
-                                className="rounded-xl border-navy-100 hover:bg-navy-50 font-bold px-6"
-                              >
-                                View Marina
-                              </Button>
-                            </Link>
-                            {reservation.marina.phone && (
-                              <Button
-                                variant="outline"
-                                className="rounded-xl border-navy-100 hover:bg-navy-50 font-bold px-6"
-                              >
-                                Contact Marina
-                              </Button>
-                            )}
-                            {(reservation.status === "confirmed" ||
-                              reservation.status === "pending") && (
-                              <Button
-                                variant="ghost"
-                                className="text-red-500 hover:text-red-600 hover:bg-red-50 rounded-xl font-bold ml-auto"
-                              >
-                                Request Cancellation
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                        </CardContent>
+                      </Card>
+                    );
+                  })()}
                 </motion.div>
               ))}
             </motion.div>
           )}
 
           {/* Empty State */}
-          {!isLoading && !error && filteredReservations.length === 0 && (
+          {!isLoading && !error && displayedReservations.length === 0 && (
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}

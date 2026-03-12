@@ -1,6 +1,7 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import axios from "axios";
 import type { RootState } from "../index";
+import type { MarinaServiceTypePricing, BookingServiceType } from "@shared/api";
 
 interface PriceRange {
   min: number | null;
@@ -521,6 +522,46 @@ export const deleteMarinaImage = createAsyncThunk(
   },
 );
 
+export const fetchMarinaServicePricing = createAsyncThunk(
+  "adminMarinas/fetchMarinaServicePricing",
+  async (marinaId: number, { getState, rejectWithValue }) => {
+    try {
+      const { hostAuth } = getState() as RootState;
+      const { data } = await axios.get(
+        `/api/host/marina-management/service-pricing/${marinaId}`,
+        { headers: { Authorization: `Bearer ${hostAuth.sessionToken}` } },
+      );
+      return data.data as MarinaServiceTypePricing[];
+    } catch (error: any) {
+      return rejectWithValue(
+        error.response?.data?.error || "Failed to fetch service pricing",
+      );
+    }
+  },
+);
+
+export const updateMarinaServicePricing = createAsyncThunk(
+  "adminMarinas/updateMarinaServicePricing",
+  async (
+    payload: { marinaId: number; pricing: MarinaServiceTypePricing[] },
+    { getState, rejectWithValue },
+  ) => {
+    try {
+      const { hostAuth } = getState() as RootState;
+      await axios.put(
+        `/api/host/marina-management/service-pricing/${payload.marinaId}`,
+        { pricing: payload.pricing },
+        { headers: { Authorization: `Bearer ${hostAuth.sessionToken}` } },
+      );
+      return payload.pricing;
+    } catch (error: any) {
+      return rejectWithValue(
+        error.response?.data?.error || "Failed to update service pricing",
+      );
+    }
+  },
+);
+
 const adminMarinasSlice = createSlice({
   name: "adminMarinas",
   initialState,
@@ -652,6 +693,28 @@ const adminMarinasSlice = createSlice({
         state.saving = false;
       })
       .addCase(deleteMarinaImage.rejected, (state, action) => {
+        state.saving = false;
+        state.error = action.payload as string;
+      })
+      .addCase(fetchMarinaServicePricing.pending, (state) => {
+        state.saving = true;
+        state.error = null;
+      })
+      .addCase(fetchMarinaServicePricing.fulfilled, (state) => {
+        state.saving = false;
+      })
+      .addCase(fetchMarinaServicePricing.rejected, (state, action) => {
+        state.saving = false;
+        state.error = action.payload as string;
+      })
+      .addCase(updateMarinaServicePricing.pending, (state) => {
+        state.saving = true;
+        state.error = null;
+      })
+      .addCase(updateMarinaServicePricing.fulfilled, (state) => {
+        state.saving = false;
+      })
+      .addCase(updateMarinaServicePricing.rejected, (state, action) => {
         state.saving = false;
         state.error = action.payload as string;
       });

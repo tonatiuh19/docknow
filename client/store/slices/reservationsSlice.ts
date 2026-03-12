@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import axios from "axios";
+import type { BookingServiceType } from "@shared/api";
 
 const apiBaseURL =
   typeof import.meta !== "undefined" && import.meta.env?.VITE_API_URL
@@ -36,6 +37,7 @@ interface Boat {
 
 interface Reservation {
   id: number;
+  serviceType: BookingServiceType;
   checkInDate: string;
   checkOutDate: string;
   totalDays: number;

@@ -12,6 +12,7 @@ const ScrollToTop = () => {
 import Discover from "./pages/Discover";
 import MarinaDetail from "./pages/MarinaDetail";
 import Reservations from "./pages/Reservations";
+import ReservationConversation from "./pages/ReservationConversation";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 import AuthGuard from "./components/AuthGuard";
@@ -41,6 +42,14 @@ const AppRoutes = () => (
         element={
           <AuthGuard>
             <Reservations />
+          </AuthGuard>
+        }
+      />
+      <Route
+        path="/reservations/:reservationId/conversation"
+        element={
+          <AuthGuard>
+            <ReservationConversation />
           </AuthGuard>
         }
       />

@@ -4,6 +4,8 @@ import {
   PaymentIntentRequest,
   PaymentIntentResponse,
   ConfirmBookingRequest,
+  BookingServiceType,
+  SavedPaymentMethod,
 } from "@shared/api";
 
 const apiBaseURL =
@@ -26,6 +28,7 @@ interface UserBoat {
   registration_number?: string;
   insurance_provider?: string;
   insurance_policy_number?: string;
+  photo_url?: string | null;
 }
 
 interface BoatType {
@@ -81,6 +84,9 @@ interface BookingState {
   fileUploads: Record<number, FileUploadState>;
   // Payment-related state
   paymentClientSecret: string | null;
+  setupIntentClientSecret: string | null;
+  paymentMethods: SavedPaymentMethod[];
+  defaultPaymentMethodId: string | null;
   bookingId: number | null;
   paymentStatus: "idle" | "processing" | "succeeded" | "failed";
   paymentError: string | null;
@@ -96,6 +102,9 @@ const initialState: BookingState = {
   preCheckoutResponses: {},
   fileUploads: {},
   paymentClientSecret: null,
+  setupIntentClientSecret: null,
+  paymentMethods: [],
+  defaultPaymentMethodId: null,
   bookingId: null,
   paymentStatus: "idle",
   paymentError: null,
@@ -153,6 +162,7 @@ export const createBoat = createAsyncThunk(
       registration_number?: string;
       insurance_provider?: string;
       insurance_policy_number?: string;
+      photo_url?: string;
     },
     { rejectWithValue },
   ) => {
@@ -322,11 +332,13 @@ export const createPaymentIntent = createAsyncThunk(
       userId: number;
       marinaId: number;
       boatId: number;
-      slipId: number;
+      slipId?: number;
+      paymentMethodId?: string;
       checkIn: string;
       checkOut: string;
       couponCode?: string;
       specialRequests?: string;
+      serviceType?: BookingServiceType;
     },
     { rejectWithValue },
   ) => {
@@ -343,6 +355,51 @@ export const createPaymentIntent = createAsyncThunk(
     } catch (error: any) {
       return rejectWithValue(
         error.response?.data?.error || "Failed to create payment intent",
+      );
+    }
+  },
+);
+
+// Fetch saved payment methods
+export const fetchSavedPaymentMethods = createAsyncThunk(
+  "booking/fetchSavedPaymentMethods",
+  async (_, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem("authToken");
+      const { data } = await axios.get(`${apiBaseURL}/api/payments/methods`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return {
+        methods: (data.methods || []) as SavedPaymentMethod[],
+        defaultPaymentMethodId: (data.defaultPaymentMethodId || null) as
+          | string
+          | null,
+      };
+    } catch (error: any) {
+      return rejectWithValue(
+        error.response?.data?.error || "Failed to fetch payment methods",
+      );
+    }
+  },
+);
+
+// Create setup intent for attaching new card
+export const createSetupIntent = createAsyncThunk(
+  "booking/createSetupIntent",
+  async (_, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem("authToken");
+      const { data } = await axios.post(
+        `${apiBaseURL}/api/payments/setup-intent`,
+        {},
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      return data.clientSecret as string;
+    } catch (error: any) {
+      return rejectWithValue(
+        error.response?.data?.error || "Failed to create setup intent",
       );
     }
   },
@@ -482,10 +539,16 @@ const bookingSlice = createSlice({
       state.preCheckoutResponses = {};
       state.fileUploads = {};
       state.paymentClientSecret = null;
+      state.setupIntentClientSecret = null;
+      state.paymentMethods = [];
+      state.defaultPaymentMethodId = null;
       state.bookingId = null;
       state.paymentStatus = "idle";
       state.paymentError = null;
       state.error = null;
+    },
+    clearSetupIntentClientSecret: (state) => {
+      state.setupIntentClientSecret = null;
     },
     clearError: (state) => {
       state.error = null;
@@ -569,6 +632,9 @@ const bookingSlice = createSlice({
       state.paymentStatus = "processing";
       state.error = null;
       state.paymentError = null;
+      // Avoid rendering stale PaymentElement from a previous attempt.
+      state.paymentClientSecret = null;
+      state.bookingId = null;
     });
     builder.addCase(createPaymentIntent.fulfilled, (state, action) => {
       state.isLoading = false;
@@ -579,6 +645,36 @@ const bookingSlice = createSlice({
     builder.addCase(createPaymentIntent.rejected, (state, action) => {
       state.isLoading = false;
       state.paymentStatus = "failed";
+      state.paymentError = action.payload as string;
+    });
+
+    // Saved payment methods
+    builder.addCase(fetchSavedPaymentMethods.pending, (state) => {
+      state.isLoading = true;
+      state.error = null;
+    });
+    builder.addCase(fetchSavedPaymentMethods.fulfilled, (state, action) => {
+      state.isLoading = false;
+      state.paymentMethods = action.payload.methods;
+      state.defaultPaymentMethodId = action.payload.defaultPaymentMethodId;
+    });
+    builder.addCase(fetchSavedPaymentMethods.rejected, (state, action) => {
+      state.isLoading = false;
+      state.error = action.payload as string;
+    });
+
+    // Setup intent
+    builder.addCase(createSetupIntent.pending, (state) => {
+      state.isLoading = true;
+      state.error = null;
+      state.paymentError = null;
+    });
+    builder.addCase(createSetupIntent.fulfilled, (state, action) => {
+      state.isLoading = false;
+      state.setupIntentClientSecret = action.payload;
+    });
+    builder.addCase(createSetupIntent.rejected, (state, action) => {
+      state.isLoading = false;
       state.paymentError = action.payload as string;
     });
 
@@ -641,6 +737,7 @@ export const {
   setPaymentStatus,
   setPaymentError,
   clearBookingState,
+  clearSetupIntentClientSecret,
   clearError,
 } = bookingSlice.actions;
 export default bookingSlice.reducer;

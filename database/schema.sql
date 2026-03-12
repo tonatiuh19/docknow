@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost:3306
--- Generation Time: Mar 04, 2026 at 03:21 PM
+-- Generation Time: Mar 11, 2026 at 08:41 PM
 -- Server version: 5.7.23-23
 -- PHP Version: 8.1.34
 
@@ -174,6 +174,7 @@ CREATE TABLE `boats` (
   `registration_number` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `insurance_provider` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `insurance_policy_number` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `photo_url` varchar(1024) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'CDN URL of the boat primary photo',
   `is_active` tinyint(1) DEFAULT '1',
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -183,8 +184,8 @@ CREATE TABLE `boats` (
 -- Dumping data for table `boats`
 --
 
-INSERT INTO `boats` (`id`, `owner_id`, `name`, `model`, `manufacturer`, `boat_type_id`, `year`, `length_meters`, `width_meters`, `draft_meters`, `home_marina`, `registration_number`, `insurance_provider`, `insurance_policy_number`, `is_active`, `created_at`, `updated_at`) VALUES
-(2, 7, 'Boat Test', 'Mustang Ocean', 'Ford', 3, '2025', 6.00, 3.00, 1.00, NULL, NULL, NULL, NULL, 1, '2026-02-14 05:56:20', '2026-02-14 05:56:20');
+INSERT INTO `boats` (`id`, `owner_id`, `name`, `model`, `manufacturer`, `boat_type_id`, `year`, `length_meters`, `width_meters`, `draft_meters`, `home_marina`, `registration_number`, `insurance_provider`, `insurance_policy_number`, `photo_url`, `is_active`, `created_at`, `updated_at`) VALUES
+(2, 7, 'Boat Test', 'Mustang Ocean', 'Ford', 3, '2025', 6.00, 3.00, 1.00, NULL, NULL, NULL, NULL, NULL, 1, '2026-02-14 05:56:20', '2026-02-14 05:56:20');
 
 -- --------------------------------------------------------
 
@@ -241,6 +242,7 @@ CREATE TABLE `bookings` (
   `cancelled_at` timestamp NULL DEFAULT NULL,
   `cancellation_reason` text COLLATE utf8mb4_unicode_ci,
   `special_requests` text COLLATE utf8mb4_unicode_ci,
+  `service_type` enum('slip','dry_stack','shipyard_maintenance') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'slip' COMMENT 'Type of marina service being booked',
   `pre_checkout_completed` tinyint(1) DEFAULT '0',
   `pre_checkout_completed_at` timestamp NULL DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -251,16 +253,16 @@ CREATE TABLE `bookings` (
 -- Dumping data for table `bookings`
 --
 
-INSERT INTO `bookings` (`id`, `user_id`, `marina_id`, `slip_id`, `boat_id`, `check_in_date`, `check_out_date`, `total_days`, `price_per_day`, `subtotal`, `service_fee`, `discount_amount`, `total_amount`, `coupon_code`, `status`, `requires_approval`, `approved_at`, `approved_by`, `stripe_payment_intent_id`, `cancelled_at`, `cancellation_reason`, `special_requests`, `pre_checkout_completed`, `pre_checkout_completed_at`, `created_at`, `updated_at`) VALUES
-(14, 7, 10, 29, 2, '2026-02-15', '2026-02-18', 3, 185.00, 555.00, 55.50, 0.00, 610.50, NULL, 'confirmed', 0, NULL, NULL, 'pi_3T0c4eGnfvtfvDAr0jBo5RiJ', NULL, NULL, NULL, 0, NULL, '2026-02-14 06:11:24', '2026-02-14 06:21:09'),
-(15, 7, 10, 28, 2, '2026-02-22', '2026-02-25', 3, 185.00, 555.00, 55.50, 0.00, 610.50, NULL, 'pending', 0, NULL, NULL, 'pi_3T1YkiGnfvtfvDAr1O4Nld30', NULL, NULL, NULL, 0, NULL, '2026-02-16 20:50:44', '2026-02-16 20:50:44'),
-(16, 7, 10, 29, 2, '2026-02-24', '2026-02-28', 4, 185.00, 740.00, 74.00, 0.00, 814.00, NULL, 'pending', 0, NULL, NULL, 'pi_3T23buGnfvtfvDAr1VvC0WlB', NULL, NULL, NULL, 0, NULL, '2026-02-18 05:47:43', '2026-02-18 05:47:43'),
-(17, 7, 10, 27, 2, '2026-02-27', '2026-03-04', 5, 185.00, 925.00, 92.50, 0.00, 1017.50, NULL, 'pending', 0, NULL, NULL, 'pi_3T48cJGnfvtfvDAr1Y1BOPPC', NULL, NULL, NULL, 0, NULL, '2026-02-23 23:32:43', '2026-02-23 23:32:43'),
-(18, 7, 10, 28, 2, '2026-02-27', '2026-02-28', 1, 185.00, 185.00, 18.50, 0.00, 203.50, NULL, 'pending', 0, NULL, NULL, 'pi_3T5GatGnfvtfvDAr1KrtUVEw', NULL, NULL, NULL, 0, NULL, '2026-02-27 02:15:55', '2026-02-27 02:15:55'),
-(19, 7, 10, 27, 2, '2026-03-17', '2026-03-20', 3, 185.00, 555.00, 55.50, 0.00, 610.50, NULL, 'pending', 0, NULL, NULL, 'pi_3T5ajCGnfvtfvDAr0nAII4MH', NULL, NULL, NULL, 0, NULL, '2026-02-27 23:45:50', '2026-02-27 23:45:50'),
-(20, 7, 10, 28, 2, '2026-03-03', '2026-03-06', 3, 185.00, 555.00, 55.50, 0.00, 610.50, NULL, 'pending', 0, NULL, NULL, 'pi_3T5attGnfvtfvDAr0Jssgc46', NULL, NULL, NULL, 0, NULL, '2026-02-27 23:56:53', '2026-02-27 23:56:53'),
-(21, 7, 10, 29, 2, '2026-03-03', '2026-03-07', 4, 185.00, 740.00, 74.00, 0.00, 814.00, NULL, 'pending', 0, NULL, NULL, 'pi_3T5bkhGnfvtfvDAr1FIXE65O', NULL, NULL, NULL, 0, NULL, '2026-02-28 00:51:27', '2026-02-28 00:51:27'),
-(22, 7, 10, 27, 2, '2026-03-22', '2026-03-26', 4, 185.00, 740.00, 74.00, 0.00, 814.00, NULL, 'confirmed', 0, NULL, NULL, 'pi_3T5cUtGdyWn9Nlx00TpF89m3', NULL, NULL, NULL, 0, NULL, '2026-02-28 01:39:11', '2026-02-28 01:39:13');
+INSERT INTO `bookings` (`id`, `user_id`, `marina_id`, `slip_id`, `boat_id`, `check_in_date`, `check_out_date`, `total_days`, `price_per_day`, `subtotal`, `service_fee`, `discount_amount`, `total_amount`, `coupon_code`, `status`, `requires_approval`, `approved_at`, `approved_by`, `stripe_payment_intent_id`, `cancelled_at`, `cancellation_reason`, `special_requests`, `service_type`, `pre_checkout_completed`, `pre_checkout_completed_at`, `created_at`, `updated_at`) VALUES
+(14, 7, 10, 29, 2, '2026-02-15', '2026-02-18', 3, 185.00, 555.00, 55.50, 0.00, 610.50, NULL, 'confirmed', 0, NULL, NULL, 'pi_3T0c4eGnfvtfvDAr0jBo5RiJ', NULL, NULL, NULL, 'slip', 0, NULL, '2026-02-14 06:11:24', '2026-02-14 06:21:09'),
+(15, 7, 10, 28, 2, '2026-02-22', '2026-02-25', 3, 185.00, 555.00, 55.50, 0.00, 610.50, NULL, 'pending', 0, NULL, NULL, 'pi_3T1YkiGnfvtfvDAr1O4Nld30', NULL, NULL, NULL, 'slip', 0, NULL, '2026-02-16 20:50:44', '2026-02-16 20:50:44'),
+(16, 7, 10, 29, 2, '2026-02-24', '2026-02-28', 4, 185.00, 740.00, 74.00, 0.00, 814.00, NULL, 'pending', 0, NULL, NULL, 'pi_3T23buGnfvtfvDAr1VvC0WlB', NULL, NULL, NULL, 'slip', 0, NULL, '2026-02-18 05:47:43', '2026-02-18 05:47:43'),
+(17, 7, 10, 27, 2, '2026-02-27', '2026-03-04', 5, 185.00, 925.00, 92.50, 0.00, 1017.50, NULL, 'pending', 0, NULL, NULL, 'pi_3T48cJGnfvtfvDAr1Y1BOPPC', NULL, NULL, NULL, 'slip', 0, NULL, '2026-02-23 23:32:43', '2026-02-23 23:32:43'),
+(18, 7, 10, 28, 2, '2026-02-27', '2026-02-28', 1, 185.00, 185.00, 18.50, 0.00, 203.50, NULL, 'pending', 0, NULL, NULL, 'pi_3T5GatGnfvtfvDAr1KrtUVEw', NULL, NULL, NULL, 'slip', 0, NULL, '2026-02-27 02:15:55', '2026-02-27 02:15:55'),
+(19, 7, 10, 27, 2, '2026-03-17', '2026-03-20', 3, 185.00, 555.00, 55.50, 0.00, 610.50, NULL, 'pending', 0, NULL, NULL, 'pi_3T5ajCGnfvtfvDAr0nAII4MH', NULL, NULL, NULL, 'slip', 0, NULL, '2026-02-27 23:45:50', '2026-02-27 23:45:50'),
+(20, 7, 10, 28, 2, '2026-03-03', '2026-03-06', 3, 185.00, 555.00, 55.50, 0.00, 610.50, NULL, 'pending', 0, NULL, NULL, 'pi_3T5attGnfvtfvDAr0Jssgc46', NULL, NULL, NULL, 'slip', 0, NULL, '2026-02-27 23:56:53', '2026-02-27 23:56:53'),
+(21, 7, 10, 29, 2, '2026-03-03', '2026-03-07', 4, 185.00, 740.00, 74.00, 0.00, 814.00, NULL, 'pending', 0, NULL, NULL, 'pi_3T5bkhGnfvtfvDAr1FIXE65O', NULL, NULL, NULL, 'slip', 0, NULL, '2026-02-28 00:51:27', '2026-02-28 00:51:27'),
+(22, 7, 10, 27, 2, '2026-03-22', '2026-03-26', 4, 185.00, 740.00, 74.00, 0.00, 814.00, NULL, 'confirmed', 0, NULL, NULL, 'pi_3T5cUtGdyWn9Nlx00TpF89m3', NULL, NULL, NULL, 'slip', 0, NULL, '2026-02-28 01:39:11', '2026-02-28 01:39:13');
 
 -- --------------------------------------------------------
 
@@ -357,8 +359,8 @@ CREATE TABLE `environment_keys` (
 --
 
 INSERT INTO `environment_keys` (`id`, `title`, `type`, `key_string`, `is_test`, `created_at`, `updated_at`) VALUES
-(1, 'stripe', 'publishable', 'pk_test_REPLACE_WITH_YOUR_STRIPE_TEST_PUBLISHABLE_KEY', 1, '2026-02-23 23:51:17', '2026-02-23 23:51:17'),
-(2, 'stripe', 'secret', 'sk_test_REPLACE_WITH_YOUR_STRIPE_TEST_SECRET_KEY', 1, '2026-02-23 23:51:17', '2026-02-23 23:51:17'),
+(1, 'stripe', 'publishable', 'pk_test_REPLACE_WITH_YOUR_KEY', 1, '2026-02-23 23:51:17', '2026-02-23 23:51:17'),
+(2, 'stripe', 'secret', 'sk_test_REPLACE_WITH_YOUR_KEY', 1, '2026-02-23 23:51:17', '2026-02-23 23:51:17'),
 (3, 'stripe', 'publishable', '', 0, '2026-02-23 23:51:17', '2026-02-23 23:51:17'),
 (4, 'stripe', 'secret', '', 0, '2026-02-23 23:51:17', '2026-02-23 23:51:17');
 
@@ -595,7 +597,8 @@ CREATE TABLE `hosts` (
 --
 
 INSERT INTO `hosts` (`id`, `marina_id`, `role`, `email`, `full_name`, `phone`, `phone_code`, `country_code`, `profile_image_url`, `company_name`, `is_active`, `email_verified`, `created_at`, `updated_at`) VALUES
-(1, 10, 'primary', 'axgoomez@gmail.com', 'Alex Gomez', '4741400363', '+52', 'MX', NULL, NULL, 1, 1, '2025-11-29 23:46:15', '2026-02-19 23:12:24');
+(1, 10, 'primary', 'axgoomez@gmail.com', 'Alex Gomez', '4741400363', '+52', 'MX', NULL, NULL, 1, 1, '2025-11-29 23:46:15', '2026-02-19 23:12:24'),
+(12, NULL, 'primary', 'seanmoustakas@gmail.com', 'Sean Stanley', '7143575714', '+1', 'US', NULL, NULL, 1, 1, '2026-03-04 21:42:55', '2026-03-04 21:42:55');
 
 -- --------------------------------------------------------
 
@@ -640,7 +643,8 @@ INSERT INTO `host_sessions` (`id`, `host_id`, `verification_code`, `is_verified`
 (21, 1, '274510', 1, '2026-02-19 22:53:39', '2026-02-19 22:53:24'),
 (22, 1, '385772', 0, '2026-02-19 23:20:28', '2026-02-19 23:05:28'),
 (23, 1, '601169', 1, '2026-02-19 23:07:20', '2026-02-19 23:07:08'),
-(24, 1, '896689', 1, '2026-03-02 17:39:36', '2026-03-02 17:39:21');
+(24, 1, '896689', 1, '2026-03-02 17:39:36', '2026-03-02 17:39:21'),
+(25, 1, '762324', 1, '2026-03-04 21:38:19', '2026-03-04 21:38:07');
 
 -- --------------------------------------------------------
 
@@ -995,6 +999,75 @@ INSERT INTO `marina_features` (`id`, `marina_id`, `has_fuel_dock`, `has_pump_out
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `marina_hosts`
+--
+
+CREATE TABLE `marina_hosts` (
+  `host_id` int(10) UNSIGNED NOT NULL,
+  `marina_id` int(10) UNSIGNED NOT NULL,
+  `role` enum('primary','manager','staff') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'manager',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Junction table: which hosts manage which marinas (many-to-many)';
+
+--
+-- Dumping data for table `marina_hosts`
+--
+
+INSERT INTO `marina_hosts` (`host_id`, `marina_id`, `role`, `created_at`) VALUES
+(1, 10, 'primary', '2026-03-04 21:35:12'),
+(1, 11, 'primary', '2026-03-04 21:35:12'),
+(1, 12, 'primary', '2026-03-04 21:35:12'),
+(1, 13, 'primary', '2026-03-04 21:35:12'),
+(1, 14, 'primary', '2026-03-04 21:35:12'),
+(1, 19, 'primary', '2026-03-04 21:35:12'),
+(1, 20, 'primary', '2026-03-04 21:35:12'),
+(1, 21, 'primary', '2026-03-04 21:35:12'),
+(1, 22, 'primary', '2026-03-04 21:35:12'),
+(1, 23, 'primary', '2026-03-04 21:35:12'),
+(1, 24, 'primary', '2026-03-04 21:35:12'),
+(1, 25, 'primary', '2026-03-04 21:35:12'),
+(1, 26, 'primary', '2026-03-04 21:35:12'),
+(1, 27, 'primary', '2026-03-04 21:35:12'),
+(1, 28, 'primary', '2026-03-04 21:35:12'),
+(1, 29, 'primary', '2026-03-04 21:35:12'),
+(1, 30, 'primary', '2026-03-04 21:35:12'),
+(1, 31, 'primary', '2026-03-04 21:35:12'),
+(1, 32, 'primary', '2026-03-04 21:35:12'),
+(1, 33, 'primary', '2026-03-04 21:35:12'),
+(1, 34, 'primary', '2026-03-04 21:35:12'),
+(1, 35, 'primary', '2026-03-04 21:35:12'),
+(1, 36, 'primary', '2026-03-04 21:35:12'),
+(1, 37, 'primary', '2026-03-04 21:35:12'),
+(1, 38, 'primary', '2026-03-04 21:35:12'),
+(12, 10, 'primary', '2026-03-04 21:42:55'),
+(12, 11, 'primary', '2026-03-04 21:42:55'),
+(12, 12, 'primary', '2026-03-04 21:42:55'),
+(12, 13, 'primary', '2026-03-04 21:42:55'),
+(12, 14, 'primary', '2026-03-04 21:42:55'),
+(12, 19, 'primary', '2026-03-04 21:42:55'),
+(12, 20, 'primary', '2026-03-04 21:42:55'),
+(12, 21, 'primary', '2026-03-04 21:42:55'),
+(12, 22, 'primary', '2026-03-04 21:42:55'),
+(12, 23, 'primary', '2026-03-04 21:42:55'),
+(12, 24, 'primary', '2026-03-04 21:42:55'),
+(12, 25, 'primary', '2026-03-04 21:42:55'),
+(12, 26, 'primary', '2026-03-04 21:42:55'),
+(12, 27, 'primary', '2026-03-04 21:42:55'),
+(12, 28, 'primary', '2026-03-04 21:42:55'),
+(12, 29, 'primary', '2026-03-04 21:42:55'),
+(12, 30, 'primary', '2026-03-04 21:42:55'),
+(12, 31, 'primary', '2026-03-04 21:42:55'),
+(12, 32, 'primary', '2026-03-04 21:42:55'),
+(12, 33, 'primary', '2026-03-04 21:42:55'),
+(12, 34, 'primary', '2026-03-04 21:42:55'),
+(12, 35, 'primary', '2026-03-04 21:42:55'),
+(12, 36, 'primary', '2026-03-04 21:42:55'),
+(12, 37, 'primary', '2026-03-04 21:42:55'),
+(12, 38, 'primary', '2026-03-04 21:42:55');
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `marina_pre_checkout_steps`
 --
 
@@ -1010,6 +1083,44 @@ CREATE TABLE `marina_pre_checkout_steps` (
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `external_validation` json DEFAULT NULL COMMENT 'External validation configuration (Stripe Identity, Onfido, etc.)'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Configurable pre-checkout steps that guests must complete';
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `marina_service_type_pricing`
+--
+
+CREATE TABLE `marina_service_type_pricing` (
+  `id` int(10) UNSIGNED NOT NULL,
+  `marina_id` int(10) UNSIGNED NOT NULL,
+  `service_type` enum('slip','dry_stack','shipyard_maintenance') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `price_per_day` decimal(10,2) NOT NULL,
+  `is_available` tinyint(1) NOT NULL DEFAULT '1',
+  `description` text COLLATE utf8mb4_unicode_ci COMMENT 'Optional notes about this service type at this marina',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `marina_service_type_pricing`
+--
+
+INSERT INTO `marina_service_type_pricing` (`id`, `marina_id`, `service_type`, `price_per_day`, `is_available`, `description`, `created_at`, `updated_at`) VALUES
+(1, 10, 'slip', 165.00, 1, NULL, '2026-03-12 02:41:15', '2026-03-12 02:41:15'),
+(2, 11, 'slip', 85.00, 1, NULL, '2026-03-12 02:41:15', '2026-03-12 02:41:15'),
+(3, 12, 'slip', 420.00, 1, NULL, '2026-03-12 02:41:15', '2026-03-12 02:41:15'),
+(4, 13, 'slip', 110.00, 1, NULL, '2026-03-12 02:41:15', '2026-03-12 02:41:15'),
+(5, 14, 'slip', 135.00, 1, NULL, '2026-03-12 02:41:15', '2026-03-12 02:41:15'),
+(8, 10, 'dry_stack', 231.25, 1, NULL, '2026-03-12 02:41:15', '2026-03-12 02:41:15'),
+(9, 11, 'dry_stack', 118.75, 1, NULL, '2026-03-12 02:41:15', '2026-03-12 02:41:15'),
+(10, 12, 'dry_stack', 562.50, 1, NULL, '2026-03-12 02:41:15', '2026-03-12 02:41:15'),
+(11, 13, 'dry_stack', 156.25, 1, NULL, '2026-03-12 02:41:15', '2026-03-12 02:41:15'),
+(12, 14, 'dry_stack', 181.25, 1, NULL, '2026-03-12 02:41:15', '2026-03-12 02:41:15'),
+(15, 10, 'shipyard_maintenance', 323.75, 1, NULL, '2026-03-12 02:41:15', '2026-03-12 02:41:15'),
+(16, 11, 'shipyard_maintenance', 166.25, 1, NULL, '2026-03-12 02:41:15', '2026-03-12 02:41:15'),
+(17, 12, 'shipyard_maintenance', 787.50, 1, NULL, '2026-03-12 02:41:15', '2026-03-12 02:41:15'),
+(18, 13, 'shipyard_maintenance', 218.75, 1, NULL, '2026-03-12 02:41:15', '2026-03-12 02:41:15'),
+(19, 14, 'shipyard_maintenance', 253.75, 1, NULL, '2026-03-12 02:41:15', '2026-03-12 02:41:15');
 
 -- --------------------------------------------------------
 
@@ -1631,7 +1742,8 @@ INSERT INTO `user_sessions` (`id`, `user_id`, `verification_code`, `is_verified`
 (32, 7, '555124', 1, '2026-02-18 06:13:32', '2026-02-18 06:13:20'),
 (33, 7, '147914', 1, '2026-02-27 02:14:50', '2026-02-27 02:14:35'),
 (34, 7, '599211', 1, '2026-02-27 23:33:08', '2026-02-27 23:32:54'),
-(35, 7, '401111', 1, '2026-02-27 23:41:44', '2026-02-27 23:41:31');
+(35, 7, '401111', 1, '2026-02-27 23:41:44', '2026-02-27 23:41:31'),
+(36, 7, '376420', 1, '2026-03-12 02:11:58', '2026-03-12 02:11:40');
 
 -- --------------------------------------------------------
 
@@ -2089,6 +2201,13 @@ ALTER TABLE `marina_features`
   ADD UNIQUE KEY `unique_marina_features` (`marina_id`);
 
 --
+-- Indexes for table `marina_hosts`
+--
+ALTER TABLE `marina_hosts`
+  ADD PRIMARY KEY (`host_id`,`marina_id`),
+  ADD KEY `idx_mh_marina_id` (`marina_id`);
+
+--
 -- Indexes for table `marina_pre_checkout_steps`
 --
 ALTER TABLE `marina_pre_checkout_steps`
@@ -2096,6 +2215,13 @@ ALTER TABLE `marina_pre_checkout_steps`
   ADD KEY `idx_marina_id` (`marina_id`),
   ADD KEY `idx_marina_order` (`marina_id`,`step_order`),
   ADD KEY `idx_active` (`is_active`);
+
+--
+-- Indexes for table `marina_service_type_pricing`
+--
+ALTER TABLE `marina_service_type_pricing`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uniq_marina_service_type` (`marina_id`,`service_type`);
 
 --
 -- Indexes for table `moorings`
@@ -2420,13 +2546,13 @@ ALTER TABLE `home_visitors`
 -- AUTO_INCREMENT for table `hosts`
 --
 ALTER TABLE `hosts`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=12;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
 
 --
 -- AUTO_INCREMENT for table `host_sessions`
 --
 ALTER TABLE `host_sessions`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=25;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=26;
 
 --
 -- AUTO_INCREMENT for table `marinas`
@@ -2457,6 +2583,12 @@ ALTER TABLE `marina_features`
 --
 ALTER TABLE `marina_pre_checkout_steps`
   MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `marina_service_type_pricing`
+--
+ALTER TABLE `marina_service_type_pricing`
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=22;
 
 --
 -- AUTO_INCREMENT for table `moorings`
@@ -2570,7 +2702,7 @@ ALTER TABLE `users`
 -- AUTO_INCREMENT for table `user_sessions`
 --
 ALTER TABLE `user_sessions`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=36;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=37;
 
 --
 -- AUTO_INCREMENT for table `visitor_checkout_events`
@@ -2699,10 +2831,23 @@ ALTER TABLE `marina_features`
   ADD CONSTRAINT `marina_features_ibfk_1` FOREIGN KEY (`marina_id`) REFERENCES `marinas` (`id`) ON DELETE CASCADE;
 
 --
+-- Constraints for table `marina_hosts`
+--
+ALTER TABLE `marina_hosts`
+  ADD CONSTRAINT `fk_mh_host` FOREIGN KEY (`host_id`) REFERENCES `hosts` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `fk_mh_marina` FOREIGN KEY (`marina_id`) REFERENCES `marinas` (`id`) ON DELETE CASCADE;
+
+--
 -- Constraints for table `marina_pre_checkout_steps`
 --
 ALTER TABLE `marina_pre_checkout_steps`
   ADD CONSTRAINT `marina_pre_checkout_steps_ibfk_1` FOREIGN KEY (`marina_id`) REFERENCES `marinas` (`id`) ON DELETE CASCADE;
+
+--
+-- Constraints for table `marina_service_type_pricing`
+--
+ALTER TABLE `marina_service_type_pricing`
+  ADD CONSTRAINT `fk_mstp_marina_id` FOREIGN KEY (`marina_id`) REFERENCES `marinas` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `moorings`

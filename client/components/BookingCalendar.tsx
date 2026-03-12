@@ -38,6 +38,7 @@ interface Props {
     checkOut: Date | null;
   }) => void;
   onSlipSelect: (slip: AvailableSlip | null) => void;
+  showSlipSelection?: boolean;
 }
 
 const BookingCalendar: React.FC<Props> = ({
@@ -49,6 +50,7 @@ const BookingCalendar: React.FC<Props> = ({
   pricePerDay,
   onDateSelect,
   onSlipSelect,
+  showSlipSelection = true,
 }) => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectingCheckOut, setSelectingCheckOut] = useState(false);
@@ -121,6 +123,26 @@ const BookingCalendar: React.FC<Props> = ({
     return Math.max(0, availableCount);
   };
 
+  // Returns true if the date is marina-wide blocked (no slipId means the whole marina is blocked)
+  const isMarinaBlockedDate = (date: Date): boolean => {
+    if (!availability) return false;
+    const dateStr = date.toISOString().split("T")[0];
+    return availability.blockedDates.some(
+      (b) => b.date === dateStr && !b.slipId,
+    );
+  };
+
+  // For non-slip services: only marina-wide blocks disable a date.
+  // For slip services: use the per-slip count.
+  const getDateAvailabilityCount = (date: Date): number => {
+    if (!showSlipSelection) {
+      // Dry stack / shipyard bookings are service-level windows and should not
+      // be constrained by per-slip or marina-wide slip blocks.
+      return 1;
+    }
+    return getAvailableSlipsForDate(date);
+  };
+
   const isDateInPast = (date: Date) => {
     const dateCopy = new Date(date);
     dateCopy.setHours(0, 0, 0, 0);
@@ -145,7 +167,7 @@ const BookingCalendar: React.FC<Props> = ({
     if (isDateInPast(date)) return;
 
     // Don't allow selecting dates with no availability
-    if (getAvailableSlipsForDate(date) === 0) return;
+    if (getDateAvailabilityCount(date) === 0) return;
 
     if (!checkInDate || (checkInDate && checkOutDate)) {
       // First click or reset - set check-in
@@ -196,7 +218,7 @@ const BookingCalendar: React.FC<Props> = ({
       date.setHours(0, 0, 0, 0);
 
       const isPast = isDateInPast(date);
-      const availableSlips = getAvailableSlipsForDate(date);
+      const availableSlips = getDateAvailabilityCount(date);
       const isToday =
         date.getDate() === today.getDate() &&
         date.getMonth() === today.getMonth() &&
@@ -359,7 +381,7 @@ const BookingCalendar: React.FC<Props> = ({
       </div>
 
       {/* Available Slips Section */}
-      {totalNights > 0 && (
+      {totalNights > 0 && showSlipSelection && (
         <div>
           <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
             <span>Choose your slip</span>

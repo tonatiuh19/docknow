@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import Layout from "@/components/Layout";
 import MetaHelmet from "@/components/MetaHelmet";
@@ -113,6 +113,7 @@ const Discover = () => {
   const [localProtectionLevel, setLocalProtectionLevel] = useState("all");
   const [localSelectedMarinaFeatures, setLocalSelectedMarinaFeatures] =
     useState<string[]>([]);
+  const skipFirstAutoSearchRef = useRef(true);
 
   // Load initial data and handle URL parameters
   useEffect(() => {
@@ -152,34 +153,13 @@ const Discover = () => {
     }
   }, [dispatch, urlSearchParams]);
 
-  // Sync local form with Redux store
-  useEffect(() => {
-    setLocalSearchQuery(searchParams.searchTerm || "");
-    setLocalSelectedLocation(searchParams.city || "all");
-    setLocalCheckIn(searchParams.checkIn || "");
-    setLocalCheckOut(searchParams.checkOut || "");
-    setLocalPriceRange([
-      searchParams.minPrice || 0,
-      searchParams.maxPrice || 1000,
-    ]);
-    setLocalBoatLength([searchParams.minBoatLength || 0]);
-    setLocalDraft([searchParams.minDraft || 0]);
-    setLocalSelectedAmenities(searchParams.amenities || []);
-    setLocalBusinessType(searchParams.businessTypeId?.toString() || "all");
-    // Sync new filter states
-    setLocalSelectedSeabedTypes(searchParams.seabedTypes || []);
-    setLocalSelectedMooringTypes(searchParams.mooringTypes || []);
-    setLocalSelectedPointTypes(searchParams.pointTypes || []);
-    setLocalSelectedAnchorageTypes(searchParams.anchorageTypes || []);
-    setLocalProtectionLevel(searchParams.protectionLevel || "all");
-    setLocalSelectedMarinaFeatures(searchParams.marinaFeatures || []);
-  }, [searchParams]);
-
-  // Handle search
-  const handleSearch = () => {
-    const searchData = {
+  const buildSearchData = useCallback(
+    () => ({
       searchTerm: localSearchQuery || undefined,
-      city: localSelectedLocation || undefined,
+      city:
+        localSelectedLocation && localSelectedLocation !== "all"
+          ? localSelectedLocation
+          : undefined,
       checkIn: localCheckIn || undefined,
       checkOut: localCheckOut || undefined,
       minPrice: localPriceRange[0] > 0 ? localPriceRange[0] : undefined,
@@ -188,9 +168,10 @@ const Discover = () => {
       minDraft: localDraft[0] > 0 ? localDraft[0] : undefined,
       amenities:
         localSelectedAmenities.length > 0 ? localSelectedAmenities : undefined,
-      businessTypeId: localBusinessType
-        ? parseInt(localBusinessType)
-        : undefined,
+      businessTypeId:
+        localBusinessType && localBusinessType !== "all"
+          ? parseInt(localBusinessType, 10)
+          : undefined,
       // New filter parameters
       seabedTypes:
         localSelectedSeabedTypes.length > 0
@@ -218,11 +199,49 @@ const Discover = () => {
           : undefined,
       limit: 20,
       offset: 0,
-    };
+    }),
+    [
+      localSearchQuery,
+      localSelectedLocation,
+      localCheckIn,
+      localCheckOut,
+      localPriceRange,
+      localBoatLength,
+      localDraft,
+      localSelectedAmenities,
+      localBusinessType,
+      localSelectedSeabedTypes,
+      localSelectedMooringTypes,
+      localSelectedPointTypes,
+      localSelectedAnchorageTypes,
+      localProtectionLevel,
+      localSelectedMarinaFeatures,
+    ],
+  );
+
+  // Handle search
+  const handleSearch = () => {
+    const searchData = buildSearchData();
 
     dispatch(updateSearchParams(searchData));
     dispatch(searchMarinas(searchData));
   };
+
+  // Auto-apply filters as users change controls, with a short debounce.
+  useEffect(() => {
+    if (skipFirstAutoSearchRef.current) {
+      skipFirstAutoSearchRef.current = false;
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      const searchData = buildSearchData();
+      dispatch(updateSearchParams(searchData));
+      dispatch(searchMarinas(searchData));
+    }, 350);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [buildSearchData, dispatch]);
 
   // Handle clear filters
   const handleClearFilters = () => {
@@ -308,7 +327,17 @@ const Discover = () => {
   };
 
   const getAvailabilityStatus = (marina: any) => {
-    const occupancyRate = marina.available_slips / marina.total_slips;
+    if (marina.is_directory_only) {
+      return {
+        text: "Directory",
+        class: "bg-gray-100 text-gray-600 border-gray-200",
+      };
+    }
+    const available = marina.available_slips ?? 0;
+    const total = marina.total_slips ?? 0;
+    if (total === 0)
+      return { text: "Full", class: "bg-red-100 text-red-800 border-red-200" };
+    const occupancyRate = available / total;
     if (occupancyRate > 0.7)
       return {
         text: "Available",
@@ -997,6 +1026,11 @@ const Discover = () => {
                             <Card className="hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 cursor-pointer border-none shadow-lg group overflow-hidden bg-white ring-1 ring-navy-100/50 h-full flex flex-col">
                               <CardContent className="p-0 flex-1 flex flex-col">
                                 <div className="h-48 relative overflow-hidden">
+                                  {!marina.is_directory_only && (
+                                    <div className="absolute top-3 left-3 z-10 bg-ocean-600 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-md">
+                                      Book Now
+                                    </div>
+                                  )}
                                   {marina.primary_image_url ? (
                                     <>
                                       <img
@@ -1085,12 +1119,18 @@ const Discover = () => {
                                         ))}
                                     </div>
                                     <div className="text-right">
-                                      <p className="text-2xl font-black text-navy-900">
-                                        ${marina.price_per_day}
-                                        <span className="text-xs font-medium text-navy-400 ml-1">
-                                          /day
-                                        </span>
-                                      </p>
+                                      {marina.is_directory_only ? (
+                                        <p className="text-sm font-bold text-navy-400">
+                                          Booking unavailable on DockNow
+                                        </p>
+                                      ) : (
+                                        <p className="text-2xl font-black text-navy-900">
+                                          ${marina.price_per_day}
+                                          <span className="text-xs font-medium text-navy-400 ml-1">
+                                            /day
+                                          </span>
+                                        </p>
+                                      )}
                                     </div>
                                   </div>
                                 </div>

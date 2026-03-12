@@ -221,30 +221,48 @@
   }
 
   .leaflet-popup-content-wrapper {
-    @apply bg-white border-0 rounded-2xl shadow-2xl ring-1 ring-navy-200/50;
     padding: 0;
+    border: none;
+    border-radius: 16px;
+    box-shadow:
+      0 20px 48px rgba(0, 0, 0, 0.18),
+      0 4px 12px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
   }
 
   .leaflet-popup-content {
-    margin: 0;
+    margin: 13px 19px;
     font-family: inherit;
   }
 
+  .leaflet-popup-tip-container {
+    margin-top: -1px;
+  }
+
   .leaflet-popup-tip {
-    @apply bg-white shadow-lg;
+    background: #fff;
+    box-shadow: none;
   }
 
   .leaflet-popup-close-button {
-    @apply text-navy-400 hover:text-navy-900 text-xl font-bold;
-    right: 8px;
-    top: 8px;
-    width: 24px;
-    height: 24px;
-    line-height: 20px;
+    color: #fff !important;
+    background: rgba(0, 0, 0, 0.35) !important;
+    border-radius: 50% !important;
+    right: 10px !important;
+    top: 10px !important;
+    width: 22px !important;
+    height: 22px !important;
+    line-height: 22px !important;
+    font-size: 16px !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+    z-index: 10;
   }
 
   .leaflet-popup-close-button:hover {
-    background-color: transparent;
+    background: rgba(0, 0, 0, 0.55) !important;
   }
 
   .leaflet-control-zoom a {
@@ -253,31 +271,6 @@
 
   .leaflet-control-attribution {
     @apply bg-white/90 text-navy-600 text-xs;
-  }
-
-  /* Ensure marina map popup styling matches our design system */
-  .leaflet-popup-content .bg-ocean-100 {
-    background-color: hsl(var(--ocean-100));
-  }
-
-  .leaflet-popup-content .text-ocean-600 {
-    color: hsl(var(--ocean-600));
-  }
-
-  .leaflet-popup-content .text-navy-900 {
-    color: hsl(var(--navy-900));
-  }
-
-  .leaflet-popup-content .text-navy-600 {
-    color: hsl(var(--navy-600));
-  }
-
-  .leaflet-popup-content .bg-ocean-600 {
-    background-color: hsl(var(--ocean-600));
-  }
-
-  .leaflet-popup-content .hover\:bg-ocean-700:hover {
-    background-color: hsl(var(--ocean-700));
   }
 }
 
