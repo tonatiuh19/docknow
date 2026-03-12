@@ -2065,6 +2065,25 @@ const BookingFlow: React.FC<BookingFlowProps> = ({
           </AnimatePresence>
         </div>
       </div>
+
+      {/* ── Slim footer ─────────────────────────────────────────────────────── */}
+      <footer className="fixed bottom-0 left-0 right-0 z-40 bg-white/80 backdrop-blur-sm border-t border-gray-100 pt-2.5 pb-8">
+        <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-xs text-gray-400">
+          <span>© {new Date().getFullYear()} DockNow</span>
+          <a href="/privacy" className="hover:text-gray-600 transition-colors">
+            Privacy
+          </a>
+          <a href="/terms" className="hover:text-gray-600 transition-colors">
+            Terms
+          </a>
+          <a href="/support" className="hover:text-gray-600 transition-colors">
+            Support
+          </a>
+          <span className="flex items-center gap-1">
+            <Lock className="h-3 w-3" /> Secure checkout
+          </span>
+        </div>
+      </footer>
     </div>
   );
 };
