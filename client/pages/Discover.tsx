@@ -398,7 +398,7 @@ const Discover = () => {
       />
       <div className="min-h-screen bg-navy-50/50">
         {/* Header */}
-        <div className="relative bg-navy-950 pt-32 pb-20 overflow-hidden">
+        <div className="relative bg-navy-950 pt-24 sm:pt-32 pb-12 sm:pb-20 overflow-hidden">
           <motion.div
             animate={{
               scale: [1, 1.2, 1],
@@ -983,7 +983,7 @@ const Discover = () => {
                     exit={{ opacity: 0, scale: 0.98 }}
                     className="w-full"
                   >
-                    <Card className="h-[750px] shadow-2xl border-none overflow-hidden group ring-1 ring-navy-200/50">
+                    <Card className="h-[500px] sm:h-[750px] shadow-2xl border-none overflow-hidden group ring-1 ring-navy-200/50">
                       <CardHeader className="bg-white border-b border-navy-50 px-8 py-6">
                         <CardTitle className="flex items-center justify-between text-2xl">
                           <div className="flex items-center gap-3">

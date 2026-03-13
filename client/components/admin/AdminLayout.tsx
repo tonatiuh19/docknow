@@ -311,10 +311,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       </AnimatePresence>
 
       {/* Main content */}
-      <motion.div
-        animate={{ paddingLeft: isCollapsed ? 80 : 288 }}
-        transition={{ duration: 0.3, ease: "easeInOut" }}
-        className="lg:pl-72"
+      <div
+        className={`transition-[padding] duration-300 ease-in-out ${isCollapsed ? "lg:pl-20" : "lg:pl-72"}`}
       >
         {/* Top bar - Floating */}
         <header className="fixed top-4 right-4 z-30 bg-white/90 backdrop-blur-md border border-slate-200 rounded-xl shadow-lg">
@@ -368,8 +366,10 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
         </header>
 
         {/* Page content */}
-        <main className="p-8">{children}</main>
-      </motion.div>
+        <main className="p-4 sm:p-6 lg:p-8 pt-20 sm:pt-20 lg:pt-8">
+          {children}
+        </main>
+      </div>
     </div>
   );
 };

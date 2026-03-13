@@ -402,13 +402,13 @@ const Index = () => {
       </section>
 
       {/* Popular Destinations */}
-      <section className="py-32 bg-white">
+      <section className="py-16 sm:py-32 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="flex flex-col md:flex-row justify-between items-end mb-16 gap-6"
+            className="flex flex-col md:flex-row justify-between items-end mb-10 md:mb-16 gap-6"
           >
             <div className="text-left">
               <h2 className="text-4xl font-bold text-navy-900 mb-4">
@@ -427,11 +427,11 @@ const Index = () => {
             </Button>
           </motion.div>
 
-          <div className="grid md:grid-cols-4 gap-8">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-8">
             {popularDestinationsLoading
               ? Array.from({ length: 4 }).map((_, index) => (
                   <div key={index} className="group">
-                    <div className="relative h-[400px] rounded-[2rem] overflow-hidden mb-4 shadow-xl shadow-navy-200/50 bg-navy-100 animate-pulse" />
+                    <div className="relative h-[280px] sm:h-[400px] rounded-[2rem] overflow-hidden mb-4 shadow-xl shadow-navy-200/50 bg-navy-100 animate-pulse" />
                     <div className="px-2 space-y-2">
                       <div className="h-4 w-28 bg-navy-100 rounded-full animate-pulse" />
                     </div>
@@ -452,7 +452,7 @@ const Index = () => {
                       )
                     }
                   >
-                    <div className="relative h-[400px] rounded-[2rem] overflow-hidden mb-4 shadow-xl shadow-navy-200/50">
+                    <div className="relative h-[280px] sm:h-[400px] rounded-[2rem] overflow-hidden mb-4 shadow-xl shadow-navy-200/50">
                       <img
                         src={dest.image_url ?? DESTINATION_FALLBACK}
                         alt={dest.city}
@@ -493,7 +493,7 @@ const Index = () => {
       </section>
 
       {/* Why Choose Section */}
-      <section className="py-32 bg-navy-50">
+      <section className="py-16 sm:py-32 bg-navy-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -560,9 +560,9 @@ const Index = () => {
       </section>
 
       {/* Mobile App Section */}
-      <section className="py-32 relative overflow-hidden bg-white">
+      <section className="py-16 sm:py-32 relative overflow-hidden bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid lg:grid-cols-2 gap-20 items-center">
+          <div className="grid lg:grid-cols-2 gap-10 lg:gap-20 items-center">
             <motion.div
               initial={{ opacity: 0, x: -50 }}
               whileInView={{ opacity: 1, x: 0 }}
@@ -697,14 +697,14 @@ const Index = () => {
       </section>
 
       {/* Marina CRM Section */}
-      <section className="py-32 bg-navy-950 relative overflow-hidden">
+      <section className="py-16 sm:py-32 bg-navy-950 relative overflow-hidden">
         <motion.div
           animate={{ rotate: 360 }}
           transition={{ duration: 40, repeat: Infinity, ease: "linear" }}
           className="absolute -top-[20%] -right-[10%] w-[600px] h-[600px] bg-ocean-500/10 rounded-full blur-[100px]"
         />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="grid lg:grid-cols-2 gap-20 items-center">
+          <div className="grid lg:grid-cols-2 gap-10 lg:gap-20 items-center">
             <motion.div
               initial={{ opacity: 0, y: 30 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -833,7 +833,7 @@ const Index = () => {
       </section>
 
       {/* CTA Section */}
-      <section className="py-32 relative overflow-hidden">
+      <section className="py-16 sm:py-32 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-ocean" />
         <motion.div
           animate={{ x: [-100, 100], y: [-50, 50] }}

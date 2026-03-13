@@ -328,12 +328,12 @@ const Reservations = () => {
                   : "No upcoming trips scheduled."}
               </p>
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row flex-wrap gap-3 w-full md:w-auto">
               <Select
                 value={serviceTypeFilter}
                 onValueChange={setServiceTypeFilter}
               >
-                <SelectTrigger className="w-44 h-12 rounded-xl border-navy-200 bg-white hover:bg-navy-50">
+                <SelectTrigger className="w-full sm:w-44 h-12 rounded-xl border-navy-200 bg-white hover:bg-navy-50">
                   <div className="flex items-center gap-2">
                     <Anchor className="w-4 h-4" />
                     <SelectValue placeholder="Service" />
@@ -350,7 +350,7 @@ const Reservations = () => {
                 value={statusFilter}
                 onValueChange={handleStatusFilterChange}
               >
-                <SelectTrigger className="w-48 h-12 rounded-xl border-navy-200 bg-white hover:bg-navy-50">
+                <SelectTrigger className="w-full sm:w-48 h-12 rounded-xl border-navy-200 bg-white hover:bg-navy-50">
                   <div className="flex items-center gap-2">
                     <Filter className="w-4 h-4" />
                     <SelectValue />
@@ -371,10 +371,10 @@ const Reservations = () => {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search marina or city"
-                className="h-12 w-56 rounded-xl border border-navy-200 bg-white px-4 text-sm outline-none focus:ring-2 focus:ring-ocean-500"
+                className="h-12 w-full sm:w-56 rounded-xl border border-navy-200 bg-white px-4 text-sm outline-none focus:ring-2 focus:ring-ocean-500"
               />
-              <Link to="/discover">
-                <Button className="h-12 rounded-xl bg-gradient-ocean hover:shadow-glow text-white border-none px-6 flex items-center gap-2">
+              <Link to="/discover" className="w-full sm:w-auto">
+                <Button className="h-12 w-full sm:w-auto rounded-xl bg-gradient-ocean hover:shadow-glow text-white border-none px-6 flex items-center gap-2">
                   <Plus className="w-4 h-4" />
                   New Booking
                 </Button>

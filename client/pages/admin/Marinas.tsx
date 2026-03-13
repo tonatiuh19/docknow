@@ -201,7 +201,7 @@ const ServicePricingModalContent = ({
                 <span className="text-navy-700">Available</span>
               </label>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs text-navy-500 mb-1">
                   Price per day ($)
@@ -1677,7 +1677,7 @@ const AdminMarinas = () => {
           open={Boolean(activeModal)}
           onOpenChange={() => setActiveModal(null)}
         >
-          <DialogContent>
+          <DialogContent className="max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
                 {activeModal?.section.replace("-", " ")} Management

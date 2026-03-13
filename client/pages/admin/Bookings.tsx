@@ -407,81 +407,86 @@ const AdminBookings = () => {
                 Loading calendar...
               </div>
             ) : (
-              <div
-                className={`grid ${viewMode === "month" ? "grid-cols-7" : viewMode === "week" ? "grid-cols-7" : "grid-cols-1"}`}
-              >
-                {visibleDays.map((day) => {
-                  const key = format(day, "yyyy-MM-dd");
-                  const events = eventsByDay.get(key) || [];
-                  const isCurrentMonth =
-                    format(day, "MM") === format(cursorDate, "MM");
+              <div className="overflow-x-auto">
+                <div
+                  className={`grid ${viewMode === "month" ? "grid-cols-7" : viewMode === "week" ? "grid-cols-7" : "grid-cols-1"} ${viewMode !== "day" ? "min-w-[560px]" : ""}`}
+                >
+                  {visibleDays.map((day) => {
+                    const key = format(day, "yyyy-MM-dd");
+                    const events = eventsByDay.get(key) || [];
+                    const isCurrentMonth =
+                      format(day, "MM") === format(cursorDate, "MM");
 
-                  return (
-                    <div
-                      key={key}
-                      className={`min-h-[140px] border border-slate-100 p-3 ${
-                        viewMode === "month" && !isCurrentMonth
-                          ? "bg-slate-50"
-                          : "bg-white"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-xs font-semibold text-navy-700">
-                          {format(
-                            day,
-                            viewMode === "day" ? "EEEE, MMM d" : "EEE d",
-                          )}
-                        </p>
-                        {events.length > 0 && (
-                          <Badge className="bg-ocean-100 text-ocean-700 border-ocean-200">
-                            {events.length}
-                          </Badge>
-                        )}
-                      </div>
-
-                      <div className="space-y-1">
-                        {events.slice(0, 4).map((event) => (
-                          <div
-                            key={event.id}
-                            className={`text-xs px-2 py-1 rounded-md ${
-                              event.type === "booking"
-                                ? "bg-ocean-100 text-ocean-800"
-                                : "bg-slate-200 text-slate-800"
-                            }`}
-                            onClick={() => {
-                              if (event.type === "booking" && event.bookingId) {
-                                setSelectedBookingId(event.bookingId);
-                              }
-                            }}
-                            role={
-                              event.type === "booking" ? "button" : undefined
-                            }
-                            tabIndex={event.type === "booking" ? 0 : -1}
-                            onKeyDown={(keyboardEvent) => {
-                              if (
-                                event.type === "booking" &&
-                                event.bookingId &&
-                                (keyboardEvent.key === "Enter" ||
-                                  keyboardEvent.key === " ")
-                              ) {
-                                keyboardEvent.preventDefault();
-                                setSelectedBookingId(event.bookingId);
-                              }
-                            }}
-                          >
-                            {event.type === "booking" ? "🛥" : "⛔"}{" "}
-                            {event.label}
-                          </div>
-                        ))}
-                        {events.length > 4 && (
-                          <p className="text-xs text-navy-500">
-                            +{events.length - 4} more
+                    return (
+                      <div
+                        key={key}
+                        className={`min-h-[140px] border border-slate-100 p-3 ${
+                          viewMode === "month" && !isCurrentMonth
+                            ? "bg-slate-50"
+                            : "bg-white"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-xs font-semibold text-navy-700">
+                            {format(
+                              day,
+                              viewMode === "day" ? "EEEE, MMM d" : "EEE d",
+                            )}
                           </p>
-                        )}
+                          {events.length > 0 && (
+                            <Badge className="bg-ocean-100 text-ocean-700 border-ocean-200">
+                              {events.length}
+                            </Badge>
+                          )}
+                        </div>
+
+                        <div className="space-y-1">
+                          {events.slice(0, 4).map((event) => (
+                            <div
+                              key={event.id}
+                              className={`text-xs px-2 py-1 rounded-md ${
+                                event.type === "booking"
+                                  ? "bg-ocean-100 text-ocean-800"
+                                  : "bg-slate-200 text-slate-800"
+                              }`}
+                              onClick={() => {
+                                if (
+                                  event.type === "booking" &&
+                                  event.bookingId
+                                ) {
+                                  setSelectedBookingId(event.bookingId);
+                                }
+                              }}
+                              role={
+                                event.type === "booking" ? "button" : undefined
+                              }
+                              tabIndex={event.type === "booking" ? 0 : -1}
+                              onKeyDown={(keyboardEvent) => {
+                                if (
+                                  event.type === "booking" &&
+                                  event.bookingId &&
+                                  (keyboardEvent.key === "Enter" ||
+                                    keyboardEvent.key === " ")
+                                ) {
+                                  keyboardEvent.preventDefault();
+                                  setSelectedBookingId(event.bookingId);
+                                }
+                              }}
+                            >
+                              {event.type === "booking" ? "🛥" : "⛔"}{" "}
+                              {event.label}
+                            </div>
+                          ))}
+                          {events.length > 4 && (
+                            <p className="text-xs text-navy-500">
+                              +{events.length - 4} more
+                            </p>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             )}
           </CardContent>
